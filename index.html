@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Analyzer</title>
+    <link rel="stylesheet" href="/shared/css/servicenow-style.css">
+</head>
+<body>
+    <!-- ServiceNow-style Header with Arrow Navigation -->
+    <header class="sn-header">
+        <div class="sn-header-content">
+            <div class="sn-logo">
+                <span class="logo-icon">📊</span>
+                <span class="logo-text">Excel Analyzer</span>
+            </div>
+            <nav class="sn-nav">
+                <a href="/phase1" class="nav-item" data-phase="1">Phase 1: Upload</a>
+                <a href="/phase2" class="nav-item" data-phase="2">Phase 2: Analysis</a>
+                <a href="/phase3" class="nav-item" data-phase="3">Phase 3: AI Remediation</a>
+                <a href="/phase4" class="nav-item" data-phase="4">Phase 4: Export</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <div class="sn-main-container">
+        <!-- Breadcrumb -->
+        <div class="sn-breadcrumb">
+            <span class="breadcrumb-item">Home</span>
+            <span class="breadcrumb-separator">›</span>
+            <span id="breadcrumbCurrent" class="breadcrumb-item active">Phase 1: Upload & Profiling</span>
+        </div>
+
+        <!-- Phase Content Container - Content changes based on active phase -->
+        <div id="phaseContent">
+            <!-- Phase content will be loaded here dynamically -->
+        </div>
+    </div>
+
+    <!-- Shared JavaScript -->
+    <script src="/shared/js/app.js"></script>
+    <script src="/shared/js/phase-router.js"></script>
+</body>
+</html>

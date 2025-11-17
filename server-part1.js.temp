@@ -1,0 +1,395 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import ExcelJS from 'exceljs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import fs from 'fs/promises';
+import Anthropic from '@anthropic-ai/sdk';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const app = express();
+const PORT = 3000;
+
+// Initialize Anthropic client
+const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY
+});
+
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
+
+// In-memory data storage (will be lost on server restart)
+let uploadedData = null;
+let phase3Configuration = null;
+let rawExcelData = {}; // Store actual column values for Phase 3
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Middleware to set correct MIME types
+app.use((req, res, next) => {
+    if (req.path.endsWith('.js')) {
+        res.type('application/javascript');
+    } else if (req.path.endsWith('.css')) {
+        res.type('text/css');
+    }
+    next();
+});
+
+// Serve shared static files (CSS, JS)
+app.use('/shared', express.static(join(__dirname, 'shared')));
+
+// Serve phase folders as static (for documentation/assets only)
+app.use('/phase-1-upload-profiling', express.static(join(__dirname, 'phase-1-upload-profiling')));
+app.use('/phase-2-analysis', express.static(join(__dirname, 'phase-2-analysis')));
+app.use('/phase-3-ai-remediation', express.static(join(__dirname, 'phase-3-ai-remediation')));
+app.use('/phase-4-export', express.static(join(__dirname, 'phase-4-export')));
+
+// Serve main index.html for all phase routes
+app.get(['/', '/phase1', '/phase2', '/phase3', '/phase4'], (req, res) => {
+    res.sendFile(join(__dirname, 'index.html'));
+});
+
+// ===== PHASE 3 COLUMN DETAIL ROUTE =====
+app.get('/phase3/column/:columnName', (req, res) => {
+    const html = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Phase 3: Column Remediation - Excel Analyzer</title>
+            <link rel="stylesheet" href="/shared/css/servicenow-style.css">
+            <link rel="stylesheet" href="/shared/css/phase3-column.css">
+        </head>
+        <body>
+            <!-- Header with Navigation -->
+            <header class="sn-header">
+                <div class="sn-header-content">
+                    <div class="sn-logo">
+                        <span class="logo-icon">📊</span>
+                        <span>Excel Analyzer</span>
+                    </div>
+                    <nav class="sn-nav">
+                        <a href="/phase1" class="nav-item">Phase 1: Upload</a>
+                        <a href="/phase2" class="nav-item">Phase 2: Analysis</a>
+                        <a href="/phase3" class="nav-item active">Phase 3: AI Remediation</a>
+                        <a href="/phase4" class="nav-item">Phase 4: Export</a>
+                    </nav>
+                </div>
+            </header>
+
+            <div class="sn-main-container">
+                <!-- Breadcrumb -->
+                <div class="sn-breadcrumb">
+                    <span class="breadcrumb-item">Home</span>
+                    <span class="breadcrumb-separator">›</span>
+                    <span class="breadcrumb-item active">Phase 3: AI Remediation</span>
+                </div>
+
+                <!-- Page Header -->
+                <div class="sn-page-header">
+                    <h1 class="page-title">AI-Powered Remediation</h1>
+                    <div class="page-subtitle">Column-by-column data quality improvement</div>
+                </div>
+
+                <!-- Quality Score Widget -->
+                <div class="quality-widget" id="qualityWidget">
+                    <div class="quality-score-display">
+                        <div class="score-value" id="widgetQualityScore">--<span style="font-size: 0.6em;">%</span></div>
+                        <div class="score-label">Data Quality Score</div>
+                    </div>
+                    <div class="quality-details">
+                        <div class="detail-item">
+                            <div class="detail-value" id="widgetTotalRecords">0</div>
+                            <div class="detail-label">Total Records</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-value" id="widgetColumnsProcessed">0/0</div>
+                            <div class="detail-label">Columns Processed</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-value" id="widgetFileName">-</div>
+                            <div class="detail-label">File Name</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-value" id="widgetCurrentColumn">-</div>
+                            <div class="detail-label">Current Column</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Three Panel Layout -->
+                <div class="three-panel-layout">
+                    <div id="left-panel" class="left-panel"></div>
+                    <div id="middle-panel" class="middle-panel"></div>
+                    <div id="right-panel" class="right-panel"></div>
+                </div>
+            </div>
+            
+            <script type="module" src="/shared/js/phase3-column.js"></script>
+        </body>
+        </html>
+    `;
+    
+    res.send(html);
+});
+
+// Helper function to detect column type
+function detectColumnType(values) {
+    const nonEmptyValues = values.filter(v => v !== null && v !== undefined && v !== '');
+    if (nonEmptyValues.length === 0) return 'string';
+    
+    const numericCount = nonEmptyValues.filter(v => !isNaN(parseFloat(v)) && isFinite(v)).length;
+    if (numericCount / nonEmptyValues.length > 0.8) return 'number';
+    
+    const dateCount = nonEmptyValues.filter(v => {
+        if (v instanceof Date) return true;
+        const parsed = new Date(v);
+        return !isNaN(parsed.getTime());
+    }).length;
+    if (dateCount / nonEmptyValues.length > 0.8) return 'date';
+    
+    const alphanumericCount = nonEmptyValues.filter(v => {
+        const str = String(v);
+        return /^[a-zA-Z0-9]+$/.test(str) && /[a-zA-Z]/.test(str) && /[0-9]/.test(str);
+    }).length;
+    if (alphanumericCount / nonEmptyValues.length > 0.5) return 'alphanumeric';
+    
+    return 'string';
+}
+
+// Helper function to profile a column
+function profileColumn(columnName, values) {
+    const totalRecords = values.length;
+    const emptyRecords = values.filter(v => v === null || v === undefined || v === '').length;
+    const nonEmptyValues = values.filter(v => v !== null && v !== undefined && v !== '');
+    
+    const uniqueValues = new Set(nonEmptyValues.map(v => String(v))).size;
+    
+    const valueCountMap = {};
+    nonEmptyValues.forEach(v => {
+        const key = String(v);
+        valueCountMap[key] = (valueCountMap[key] || 0) + 1;
+    });
+    const duplicates = Object.values(valueCountMap).filter(count => count > 1).reduce((sum, count) => sum + count, 0);
+    
+    return {
+        name: columnName,
+        type: detectColumnType(values),
+        totalRecords,
+        emptyRecords,
+        duplicates,
+        uniqueValues,
+        isUniqueQualifier: false,
+        isReferenceData: false
+    };
+}
+
+// ===== PHASE 1: UPLOAD & PROFILING =====
+app.get('/api/phase1/content', (req, res) => {
+    res.send(`
+        <div class="sn-page-header">
+            <h1 class="page-title">Upload & Data Profiling</h1>
+            <div class="page-subtitle">Upload your Excel file to begin analysis</div>
+        </div>
+
+        <div class="sn-content">
+            <div class="sn-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">File Upload</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="upload-container">
+                        <div id="dropZone" class="drop-zone">
+                            <div class="drop-zone-icon">📁</div>
+                            <div class="drop-zone-text">
+                                <strong>Drop your Excel file here</strong>
+                                <span>or click to browse</span>
+                            </div>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                            <button class="sn-btn-primary" onclick="document.getElementById('fileInput').click()">
+                                Choose File
+                            </button>
+                        </div>
+
+                        <div id="fileInfo" class="file-info" style="display: none;">
+                            <div class="file-info-header">
+                                <span class="file-icon">📄</span>
+                                <span id="fileName" class="file-name"></span>
+                                <button class="btn-remove" onclick="Phase1.removeFile()">✕</button>
+                            </div>
+                            <div class="file-details">
+                                <span id="fileSize" class="file-size"></span>
+                                <span class="file-type">Excel Spreadsheet</span>
+                            </div>
+                        </div>
+
+                        <div id="progressContainer" class="progress-container" style="display: none;">
+                            <div class="progress-label">
+                                <span>Uploading and analyzing...</span>
+                                <span id="progressPercent">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="progressFill" class="progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button id="uploadBtn" class="sn-btn-primary" disabled onclick="Phase1.startUpload()">
+                                Upload & Analyze
+                            </button>
+                            <button class="sn-btn-secondary" onclick="Phase1.resetForm()">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <div class="info-box-header">
+                            <span class="info-icon">ℹ️</span>
+                            <strong>Supported Formats</strong>
+                        </div>
+                        <ul class="info-list">
+                            <li>.xlsx (Excel 2007+)</li>
+                            <li>.xls (Excel 97-2003)</li>
+                            <li>Maximum file size: 50 MB</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sn-panel sn-panel-info">
+                <div class="panel-header">
+                    <h2 class="panel-title">What Happens Next?</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="process-steps-vertical">
+                        <div class="process-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h3>Data Extraction</h3>
+                                <p>We'll parse your Excel file and extract all data while preserving structure.</p>
+                            </div>
+                        </div>
+                        <div class="process-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h3>Data Profiling</h3>
+                                <p>Analyze column types, patterns, null values, duplicates, and data distributions.</p>
+                            </div>
+                        </div>
+                        <div class="process-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h3>Quality Score</h3>
+                                <p>Calculate initial data quality score based on completeness, consistency, and validity.</p>
+                            </div>
+                        </div>
+                        <div class="process-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <h3>Review Results</h3>
+                                <p>View comprehensive profiling report and proceed to Phase 2 for deeper analysis.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script src="/shared/js/app.js"></script>
+        <script src="/shared/js/phase1.js"></script>
+    `);
+});
+
+// Phase 1 upload endpoint - WITH REAL EXCEL PARSING AND DATA STORAGE
+app.post('/api/phase1/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        console.log('File received:', req.file.originalname);
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(req.file.path);
+        
+        const worksheet = workbook.worksheets[0];
+        
+        const headerRow = worksheet.getRow(1);
+        const columns = [];
+        const columnData = {};
+        
+        headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            const columnName = String(cell.value || `Column ${colNumber}`);
+            columns.push(columnName);
+            columnData[columnName] = [];
+        });
+        
+        let totalRows = 0;
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1) return;
+            
+            totalRows++;
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                const columnName = columns[colNumber - 1];
+                if (columnName) {
+                    columnData[columnName].push(cell.value);
+                }
+            });
+        });
+        
+        const profiledColumns = columns.map(columnName => 
+            profileColumn(columnName, columnData[columnName])
+        );
+        
+        const totalCells = totalRows * columns.length;
+        const emptyCells = profiledColumns.reduce((sum, col) => sum + col.emptyRecords, 0);
+        const dataQualityScore = Math.round(((totalCells - emptyCells) / totalCells) * 100);
+        
+        // Store BOTH profiled data AND raw values
+        uploadedData = {
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            totalRecords: totalRows,
+            totalColumns: columns.length,
+            columns: profiledColumns,
+            dataQualityScore
+        };
+        
+        // Store raw column data for Phase 3
+        rawExcelData = columnData;
+        
+        console.log(`Parsed: ${totalRows} rows, ${columns.length} columns`);
+        
+        await fs.unlink(req.file.path);
+        
+        res.json({
+            success: true,
+            message: 'File uploaded and analyzed successfully',
+            data: {
+                fileName: req.file.originalname,
+                totalRecords: totalRows,
+                totalColumns: columns.length,
+                dataQualityScore
+            }
+        });
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Upload failed: ' + error.message 
+        });
+    }
+});
+
+// Continue with Phase 2, 3, 4 endpoints...
+// (Continuing in next message due to length)

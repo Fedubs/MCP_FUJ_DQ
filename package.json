@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "mkdir -p dist && cp src/index.js dist/index.js",
-    "start": "node dist/index.js"
+    "start": "node server.js",
+    "start:mcp": "node dist/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

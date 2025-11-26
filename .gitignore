@@ -5,3 +5,5 @@ uploads/
 *.log
 dist/
 server.js.backup*
+Pront per Startsession.rtf
+.env

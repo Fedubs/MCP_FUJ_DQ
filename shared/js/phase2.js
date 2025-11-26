@@ -10,10 +10,23 @@ const Phase2 = {
         columnSettings: []
     },
     
+    // Common ServiceNow CMDB tables
+    snowTables: [
+        { value: 'cmdb_ci', label: 'Configuration Item (cmdb_ci)' },
+        { value: 'cmdb_ci_hardware', label: 'Hardware (cmdb_ci_hardware)' },
+        { value: 'cmdb_ci_server', label: 'Server (cmdb_ci_server)' },
+        { value: 'cmdb_ci_computer', label: 'Computer (cmdb_ci_computer)' },
+        { value: 'cmdb_ci_vm_instance', label: 'Virtual Machine (cmdb_ci_vm_instance)' },
+        { value: 'cmn_location', label: 'Location (cmn_location)' },
+        { value: 'core_company', label: 'Company (core_company)' },
+        { value: 'sys_user', label: 'User (sys_user)' },
+        { value: 'sys_user_group', label: 'Group (sys_user_group)' },
+        { value: 'cmdb_model', label: 'Model (cmdb_model)' },
+        { value: 'cmdb_ci_network_adapter', label: 'Network Adapter (cmdb_ci_network_adapter)' }
+    ],
+    
     async init() {
         console.log('[Phase2] init() called');
-        console.log('[Phase2] App object available?', typeof App !== 'undefined');
-        console.log('[Phase2] App.formatFileSize available?', typeof App?.formatFileSize === 'function');
         
         try {
             await this.loadUploadedData();
@@ -29,76 +42,46 @@ const Phase2 = {
     async loadUploadedData() {
         console.log('[Phase2] loadUploadedData() starting...');
         try {
-            console.log('[Phase2] Fetching /api/phase2/columns...');
             const response = await fetch('/api/phase2/columns');
-            
-            console.log('[Phase2] Response status:', response.status);
             
             if (!response.ok) {
                 throw new Error('No data available');
             }
             
             const data = await response.json();
-            console.log('[Phase2] Data received:', {
-                fileName: data.fileName,
-                totalRecords: data.totalRecords,
-                totalColumns: data.columns?.length,
-                dataQualityScore: data.dataQualityScore
-            });
+            console.log('[Phase2] Data received');
             
             this.fileData = data;
             this.columns = data.columns;
             
-            // Update quality widget with real data
-            console.log('[Phase2] Updating quality widget...');
-            
+            // Update quality widget
             const widgetQualityScore = document.getElementById('widgetQualityScore');
-            console.log('[Phase2] widgetQualityScore element:', widgetQualityScore);
             if (widgetQualityScore) {
                 widgetQualityScore.innerHTML = `${data.dataQualityScore}<span style="font-size: 0.6em;">%</span>`;
-                console.log('[Phase2] Quality score updated to:', data.dataQualityScore);
             }
             
             const widgetTotalRecords = document.getElementById('widgetTotalRecords');
-            console.log('[Phase2] widgetTotalRecords element:', widgetTotalRecords);
             if (widgetTotalRecords) {
                 widgetTotalRecords.textContent = data.totalRecords.toLocaleString();
             }
             
             const widgetTotalColumns = document.getElementById('widgetTotalColumns');
-            console.log('[Phase2] widgetTotalColumns element:', widgetTotalColumns);
             if (widgetTotalColumns) {
                 widgetTotalColumns.textContent = data.columns.length;
             }
             
             const widgetFileName = document.getElementById('widgetFileName');
-            console.log('[Phase2] widgetFileName element:', widgetFileName);
             if (widgetFileName) {
                 widgetFileName.textContent = data.fileName;
             }
             
             const widgetFileSize = document.getElementById('widgetFileSize');
-            console.log('[Phase2] widgetFileSize element:', widgetFileSize);
-            console.log('[Phase2] About to call App.formatFileSize with:', data.fileSize);
-            console.log('[Phase2] App object:', App);
-            
-            if (widgetFileSize) {
-                if (typeof App !== 'undefined' && typeof App.formatFileSize === 'function') {
-                    widgetFileSize.textContent = App.formatFileSize(data.fileSize);
-                    console.log('[Phase2] File size updated successfully');
-                } else {
-                    console.error('[Phase2] App.formatFileSize not available!');
-                    console.error('[Phase2] App:', typeof App);
-                    console.error('[Phase2] App.formatFileSize:', typeof App?.formatFileSize);
-                    widgetFileSize.textContent = data.fileSize + ' bytes';
-                }
+            if (widgetFileSize && typeof App !== 'undefined' && typeof App.formatFileSize === 'function') {
+                widgetFileSize.textContent = App.formatFileSize(data.fileSize);
             }
-            
-            console.log('[Phase2] loadUploadedData() completed successfully');
             
         } catch (error) {
             console.error('[Phase2] Error in loadUploadedData():', error);
-            console.error('[Phase2] Error stack:', error.stack);
             alert('No file uploaded. Please upload a file in Phase 1 first.');
             window.location.href = '/phase1';
         }
@@ -165,6 +148,17 @@ const Phase2 = {
                                ${col.isReferenceData ? 'checked' : ''}>
                         <span>Reference Data (ServiceNow Check)</span>
                     </label>
+                    
+                    <!-- ServiceNow Table Selection (hidden by default) -->
+                    <div class="snow-table-selection" id="snowTable_${index}" style="display: ${col.isReferenceData ? 'block' : 'none'}; margin-top: 0.5rem;">
+                        <label class="form-label" style="font-size: 0.9rem; margin-bottom: 0.25rem;">ServiceNow Table:</label>
+                        <select class="form-input snow-table-select" data-index="${index}" style="font-size: 0.9rem;">
+                            <option value="">Select table...</option>
+                            ${this.snowTables.map(table => 
+                                `<option value="${table.value}" ${col.serviceNowTable === table.value ? 'selected' : ''}>${table.label}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
                 </div>
             </div>
         `).join('');
@@ -193,12 +187,30 @@ const Phase2 = {
             });
         });
         
-        // Reference data checkbox
+        // Reference data checkbox - NOW SHOWS/HIDES TABLE SELECTION
         document.querySelectorAll('.reference-data-check').forEach(checkbox => {
             checkbox.addEventListener('change', (e) => {
                 const index = parseInt(e.target.dataset.index);
-                this.columns[index].isReferenceData = e.target.checked;
-                console.log(`Column ${this.columns[index].name} reference data: ${e.target.checked}`);
+                const isChecked = e.target.checked;
+                
+                this.columns[index].isReferenceData = isChecked;
+                
+                // Show/hide ServiceNow table selection
+                const tableSelection = document.getElementById(`snowTable_${index}`);
+                if (tableSelection) {
+                    tableSelection.style.display = isChecked ? 'block' : 'none';
+                }
+                
+                console.log(`Column ${this.columns[index].name} reference data: ${isChecked}`);
+            });
+        });
+        
+        // ServiceNow table selection
+        document.querySelectorAll('.snow-table-select').forEach(select => {
+            select.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                this.columns[index].serviceNowTable = e.target.value;
+                console.log(`Column ${this.columns[index].name} ServiceNow table: ${e.target.value}`);
             });
         });
         
@@ -215,18 +227,13 @@ const Phase2 = {
         const columnName = this.columns[index].name;
         
         if (confirm(`Are you sure you want to remove column "${columnName}"?`)) {
-            // Remove from array
             this.columns.splice(index, 1);
-            
-            // Re-render
             this.renderColumns();
-            
             console.log(`Column "${columnName}" removed`);
         }
     },
     
     updateColumnCount() {
-        // Update the column count in the quality widget
         const columnCountElement = document.getElementById('widgetTotalColumns');
         if (columnCountElement) {
             columnCountElement.textContent = this.columns.length;
@@ -238,22 +245,31 @@ const Phase2 = {
         const saveBtn = document.getElementById('saveConfigBtn');
         if (saveBtn) {
             saveBtn.addEventListener('click', () => this.saveConfiguration());
-            console.log('[Phase2] Save button listener attached');
         }
         
-        // NEW: Continue to Phase 3 button
         const continueBtn = document.getElementById('continuePhase3Btn');
         if (continueBtn) {
             continueBtn.addEventListener('click', () => this.continueToPhase3());
-            console.log('[Phase2] Continue button listener attached');
         }
     },
     
-    // NEW: Auto-save configuration and continue to Phase 3
     async continueToPhase3() {
         console.log('[Phase2] continueToPhase3() called');
+        
+        // Validate: if reference data is checked, table must be selected
+        let hasError = false;
+        for (let i = 0; i < this.columns.length; i++) {
+            const col = this.columns[i];
+            if (col.isReferenceData && !col.serviceNowTable) {
+                alert(`Please select a ServiceNow table for column "${col.name}"`);
+                hasError = true;
+                break;
+            }
+        }
+        
+        if (hasError) return;
+        
         try {
-            // Auto-save current column configuration to server
             const configuration = {
                 columns: this.columns,
                 totalRecords: this.fileData.totalRecords,
@@ -276,20 +292,26 @@ const Phase2 = {
             }
             
             console.log('[Phase2] Configuration auto-saved successfully!');
-            
-            // Navigate to Phase 3
             window.location.href = '/phase3';
             
         } catch (error) {
             console.error('[Phase2] Error saving configuration:', error);
-            App.showNotification('Error saving configuration. Please try again.');
+            if (typeof App !== 'undefined') {
+                App.showNotification('Error saving configuration. Please try again.');
+            } else {
+                alert('Error saving configuration. Please try again.');
+            }
         }
     },
     
     saveConfiguration() {
         const configName = document.getElementById('configName');
         if (!configName || !configName.value.trim()) {
-            App.showNotification('Please enter a configuration name');
+            if (typeof App !== 'undefined') {
+                App.showNotification('Please enter a configuration name');
+            } else {
+                alert('Please enter a configuration name');
+            }
             return;
         }
         
@@ -301,32 +323,23 @@ const Phase2 = {
                 name: col.name,
                 type: col.type,
                 isUniqueQualifier: col.isUniqueQualifier,
-                isReferenceData: col.isReferenceData
+                isReferenceData: col.isReferenceData,
+                serviceNowTable: col.serviceNowTable
             }))
         };
         
         console.log('Configuration saved:', this.configuration);
-        App.showNotification(`Configuration "${this.configuration.name}" saved successfully!`);
-        
-        // TODO: Send to backend to save permanently
-        // await App.apiCall('/phase2/save-configuration', {
-        //     method: 'POST',
-        //     body: JSON.stringify(this.configuration)
-        // });
+        if (typeof App !== 'undefined') {
+            App.showNotification(`Configuration "${this.configuration.name}" saved successfully!`);
+        } else {
+            alert(`Configuration "${this.configuration.name}" saved successfully!`);
+        }
     }
 };
 
-// Wait for DOM to be ready before initializing
-console.log('[Phase2] Document ready state:', document.readyState);
-
+// Initialize when DOM is ready
 if (document.readyState === 'loading') {
-    console.log('[Phase2] Waiting for DOMContentLoaded...');
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('[Phase2] DOMContentLoaded fired, calling Phase2.init()');
-        Phase2.init();
-    });
+    document.addEventListener('DOMContentLoaded', () => Phase2.init());
 } else {
-    // DOM is already ready
-    console.log('[Phase2] DOM already ready, calling Phase2.init() immediately');
     Phase2.init();
 }

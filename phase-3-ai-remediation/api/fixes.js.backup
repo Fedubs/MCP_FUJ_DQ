@@ -1,0 +1,446 @@
+// Phase 3: Apply Fixes API Routes (THE BIG ONE - ~1200 lines)
+import express from 'express';
+import ExcelJS from 'exceljs';
+
+const router = express.Router();
+
+// Helper function for similarity checking
+function isSimilar(str1, str2, threshold = 2) {
+    if (str1 === str2) return true;
+    if (Math.abs(str1.length - str2.length) > threshold) return false;
+    
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+        matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+        for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    
+    return matrix[str2.length][str1.length] <= threshold;
+}
+
+// POST /api/phase3/apply-fixes - Apply fixes to column data
+router.post('/api/phase3/apply-fixes', async (req, res) => {
+    try {
+        const { columnName, actionType, fixes } = req.body;
+        
+        console.log('Applying', actionType, 'fixes to column:', columnName);
+        console.log('Total fixes to apply:', fixes.length);
+        
+        // Get shared state
+        const rawExcelData = req.app.locals.rawExcelData;
+        const uploadedFilePath = req.app.locals.uploadedFilePath;
+        const phase3Configuration = req.app.locals.phase3Configuration;
+        
+        if (!rawExcelData[columnName]) {
+            return res.status(404).json({
+                success: false,
+                error: 'Column "' + columnName + '" not found in raw data'
+            });
+        }
+        
+        let fixedCount = 0;
+        let columnData = [...rawExcelData[columnName]];
+        
+        // Apply fixes based on action type
+        if (actionType === 'duplicates') {
+            fixes.forEach(fix => {
+                const rowIndex = fix.rowNumber - 2;
+                if (rowIndex >= 0 && rowIndex < columnData.length) {
+                    columnData[rowIndex] = null;
+                    fixedCount++;
+                }
+            });
+            columnData = columnData.filter(val => val !== null);
+            
+        } else if (actionType === 'empty') {
+            fixes.forEach(fix => {
+                const rowIndex = fix.rowNumber - 2;
+                if (rowIndex >= 0 && rowIndex < columnData.length) {
+                    columnData[rowIndex] = fix.suggestedFix;
+                    fixedCount++;
+                }
+            });
+            
+        } else if (actionType === 'whitespace') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const trimmed = value.replace(/\s+/g, '');
+                    if (trimmed !== value) fixedCount++;
+                    return trimmed;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'capitalization') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const original = value;
+                    const titleCase = value
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .map(word => {
+                            const lowercase = ['and', 'or', 'the', 'a', 'an', 'of', 'in', 'on', 'at'];
+                            if (lowercase.includes(word)) return word;
+                            return word.charAt(0).toUpperCase() + word.slice(1);
+                        })
+                        .join(' ');
+                    
+                    if (titleCase !== original) fixedCount++;
+                    return titleCase;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'special-chars') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const original = value;
+                    const cleaned = value.replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim();
+                    if (cleaned !== original) fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'naming-convention') {
+            const patterns = {};
+            
+            columnData.forEach(value => {
+                if (typeof value === 'string' && value) {
+                    const base = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    if (base) {
+                        patterns[base] = (patterns[base] || 0) + 1;
+                    }
+                }
+            });
+            
+            const sortedPatterns = Object.entries(patterns)
+                .sort((a, b) => b[1] - a[1]);
+            
+            console.log('Detected patterns:', sortedPatterns.slice(0, 5));
+            
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const original = value;
+                    const normalized = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    
+                    for (const [pattern, count] of sortedPatterns) {
+                        if (isSimilar(normalized, pattern)) {
+                            if (pattern !== original) fixedCount++;
+                            return pattern;
+                        }
+                    }
+                    
+                    const cleaned = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    if (cleaned !== original) fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'city-normalization') {
+            const cityNormalizations = {
+                'paris': 'Paris',
+                'parise': 'Paris',
+                'parris': 'Paris',
+                'london': 'London',
+                'londres': 'London',
+                'newyork': 'New York',
+                'new york': 'New York',
+                'sydney': 'Sydney',
+                'tokyo': 'Tokyo',
+                'singapore': 'Singapore',
+                'hongkong': 'Hong Kong',
+                'hong kong': 'Hong Kong',
+                'losangeles': 'Los Angeles',
+                'los angeles': 'Los Angeles',
+                'sanfrancisco': 'San Francisco',
+                'san francisco': 'San Francisco',
+                'brisbane': 'Brisbane',
+                'melbourne': 'Melbourne',
+                'auckland': 'Auckland'
+            };
+            
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const original = value;
+                    const normalized = value.toLowerCase().trim().replace(/\s+/g, '');
+                    
+                    if (cityNormalizations[normalized]) {
+                        fixedCount++;
+                        return cityNormalizations[normalized];
+                    }
+                    
+                    for (const [key, correctName] of Object.entries(cityNormalizations)) {
+                        if (isSimilar(normalized, key)) {
+                            fixedCount++;
+                            return correctName;
+                        }
+                    }
+                    
+                    const titleCase = value
+                        .split(/\s+/)
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                        .join(' ');
+                    
+                    if (titleCase !== original) fixedCount++;
+                    return titleCase;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'currency') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const cleaned = value.replace(/[$€£¥₹]/g, '').trim();
+                    if (cleaned !== value) fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'commas') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const cleaned = value.replace(/,/g, '');
+                    if (cleaned !== value) fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'numeric-validation') {
+            columnData = columnData.map(value => {
+                if (value === null || value === undefined || value === '') return value;
+                const num = parseFloat(value);
+                const isValid = (!isNaN(num) && isFinite(num));
+                if (!isValid) fixedCount++;
+                return isValid ? num : null;
+            });
+            
+        } else if (actionType === 'negative-values') {
+            columnData = columnData.map(value => {
+                const num = parseFloat(value);
+                if (!isNaN(num) && num < 0) {
+                    fixedCount++;
+                    return Math.abs(num);
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'decimals') {
+            columnData = columnData.map(value => {
+                const num = parseFloat(value);
+                if (!isNaN(num)) {
+                    fixedCount++;
+                    return num.toFixed(2);
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'date-format') {
+            columnData = columnData.map(value => {
+                if (!value) return value;
+                
+                try {
+                    const original = value;
+                    let date;
+                    
+                    if (value instanceof Date) {
+                        date = value;
+                    } else if (typeof value === 'string') {
+                        date = new Date(value);
+                    } else if (typeof value === 'number') {
+                        date = new Date((value - 25569) * 86400 * 1000);
+                    }
+                    
+                    if (date && !isNaN(date.getTime())) {
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const formatted = year + '-' + month + '-' + day;
+                        
+                        if (formatted !== original) fixedCount++;
+                        return formatted;
+                    }
+                } catch (e) {
+                    console.error('Date parsing error:', e);
+                }
+                
+                return value;
+            });
+            
+        } else if (actionType === 'invalid-dates') {
+            columnData = columnData.map(value => {
+                if (!value) return value;
+                const date = new Date(value);
+                const isValid = !isNaN(date.getTime());
+                if (!isValid) fixedCount++;
+                return isValid ? value : null;
+            });
+            
+        } else if (actionType === 'future-dates') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            columnData = columnData.map(value => {
+                if (!value) return value;
+                const date = new Date(value);
+                if (!isNaN(date.getTime()) && date > today) {
+                    fixedCount++;
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                    const day = String(today.getDate()).padStart(2, '0');
+                    return year + '-' + month + '-' + day;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'case-format') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const upper = value.toUpperCase();
+                    if (upper !== value) fixedCount++;
+                    return upper;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'separators') {
+            columnData = columnData.map(value => {
+                if (typeof value === 'string' && value) {
+                    const cleaned = value.replace(/[_\s\.]/g, '-');
+                    if (cleaned !== value) fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'boolean-standardize') {
+            columnData = columnData.map(value => {
+                if (!value && value !== false) return null;
+                const str = String(value).toLowerCase();
+                if (['yes', 'y', '1', 'true', 't'].includes(str)) {
+                    fixedCount++;
+                    return true;
+                }
+                if (['no', 'n', '0', 'false', 'f'].includes(str)) {
+                    fixedCount++;
+                    return false;
+                }
+                return null;
+            });
+            
+        } else if (actionType === 'ai-validation') {
+            // AI-powered validation - apply fixes suggested by Claude
+            console.log('Applying AI-suggested fixes...');
+            
+            fixes.forEach(fix => {
+                const rowIndex = fix.rowNumber - 2;
+                if (rowIndex >= 0 && rowIndex < columnData.length) {
+                    columnData[rowIndex] = fix.suggestedFix;
+                    fixedCount++;
+                }
+            });
+            
+            console.log('Applied', fixedCount, 'AI-suggested fixes');
+        }
+        
+        // WRITE CHANGES BACK TO EXCEL FILE
+        console.log('Writing fixes back to Excel file...');
+        
+        try {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(uploadedFilePath);
+            const worksheet = workbook.worksheets[0];
+            
+            const headerRow = worksheet.getRow(1);
+            let targetColumnIndex = -1;
+            headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                if (String(cell.value) === columnName) {
+                    targetColumnIndex = colNumber;
+                }
+            });
+            
+            if (targetColumnIndex === -1) {
+                throw new Error('Column "' + columnName + '" not found in Excel');
+            }
+            
+            columnData.forEach((value, index) => {
+                const rowNumber = index + 2;
+                const row = worksheet.getRow(rowNumber);
+                row.getCell(targetColumnIndex).value = value;
+            });
+            
+            await workbook.xlsx.writeFile(uploadedFilePath);
+            console.log('Saved changes to Excel file');
+            
+        } catch (writeError) {
+            console.error('Error writing to Excel:', writeError);
+        }
+        
+        // Update shared state
+        rawExcelData[columnName] = columnData;
+        
+        // Recalculate statistics
+        const newStats = {
+            totalRecords: columnData.length,
+            emptyRecords: columnData.filter(v => v === null || v === undefined || v === '').length,
+            uniqueValues: new Set(columnData.filter(v => v)).size
+        };
+        
+        const valueCountMap = {};
+        columnData.filter(v => v).forEach(v => {
+            const key = String(v);
+            valueCountMap[key] = (valueCountMap[key] || 0) + 1;
+        });
+        newStats.duplicates = Object.values(valueCountMap).filter(count => count > 1).reduce((sum, count) => sum + count, 0);
+        
+        if (phase3Configuration) {
+            const colIndex = phase3Configuration.columns.findIndex(col => col.name === columnName);
+            if (colIndex !== -1) {
+                phase3Configuration.columns[colIndex] = {
+                    ...phase3Configuration.columns[colIndex],
+                    ...newStats
+                };
+            }
+        }
+        
+        console.log('Fixed', fixedCount, 'records');
+        console.log('New stats - Empty:', newStats.emptyRecords, 'Duplicates:', newStats.duplicates);
+        
+        res.json({
+            success: true,
+            fixedCount,
+            newStats,
+            message: 'Successfully fixed ' + fixedCount + ' issues in "' + columnName + '"'
+        });
+        
+    } catch (error) {
+        console.error('Error applying fixes:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+export default router;

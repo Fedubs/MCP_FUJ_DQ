@@ -1,7 +1,7 @@
 # Phase 3: AI Remediation - Detailed Documentation
 
-**Status**: ✅ UI FRAMEWORK COMPLETE (Backend Integration Pending)  
-**Last Updated**: November 16, 2025
+**Status**: ✅ UI COMPLETE + METADATA TRACKING COMPLETE  
+**Last Updated**: November 24, 2025
 
 ---
 
@@ -11,539 +11,104 @@ Phase 3 provides intelligent, column-by-column data remediation with a three-pan
 
 ---
 
+## 🆕 RECENT UPDATES (November 23, 2025)
+
+### 1. `_CHANGES_LOG` Metadata Tracking
+
+Every fix now updates the `_CHANGES_LOG` column in the Excel file:
+- Format: `ColumnName:action,ColumnName:action`
+- Actions: `changed`, `kept`, `rejected`, `edited`, `deleted`
+- Only tracks rows that were ACTUALLY modified (not all rows)
+
+**Key Fix:** Added `fixedRows = new Set()` to track only changed rows:
+```javascript
+// BEFORE (bug): Tracked ALL rows
+columnData.forEach((value, index) => {
+    updateChangesLog(worksheet, index + 2, columnName, 'changed');
+});
+
+// AFTER (fixed): Track only changed rows
+const fixedRows = new Set();
+fixes.forEach(fix => {
+    const idx = fix.rowNumber - 2;
+    if (columnData[idx] !== fix.suggestedFix) {
+        columnData[idx] = fix.suggestedFix;
+        fixedRows.add(fix.rowNumber);
+    }
+});
+fixedRows.forEach(rowNumber => {
+    updateChangesLog(worksheet, rowNumber, columnName, 'changed');
+});
+```
+
+### 2. `_ROW_DELETE` Duplicate Handling
+
+When fixing duplicates, rows are now MARKED for deletion rather than immediately removed:
+```javascript
+// In duplicates handler
+function markRowForDeletion(worksheet, rowNumber, reason) {
+    const deleteColumnIndex = ensureRowDeleteColumn(worksheet);
+    worksheet.getRow(rowNumber).getCell(deleteColumnIndex).value = reason;
+    console.log(`🗑️ Marked row ${rowNumber} for deletion: ${reason}`);
+}
+
+// Usage
+fixes.forEach(fix => {
+    markRowForDeletion(worksheet, fix.rowNumber, 'DUPLICATE');
+    updateChangesLog(worksheet, fix.rowNumber, columnName, 'deleted');
+});
+```
+
+### 3. Modal Components
+
+**Duplicate Comparison Modal:**
+- Side-by-side view of all duplicate rows
+- Actions: Delete, Edit, Keep
+- Inline editing with save/cancel
+
+**ServiceNow Reference Validation Modal:**
+- Shows Excel value vs ServiceNow matches
+- Clickable cards for quick selection
+- Manual entry option
+
+---
+
 ## Architecture
 
 ### Two-Page Structure
 
 #### 1. Landing/Explanation Page (`/phase3`)
-**Purpose:** Orient user and begin remediation process
-
-**What User Sees:**
 - 4-step horizontal process explanation
-- List of all columns to remediate (from Phase 2)
-- Quality score widget at top
-- Column types and issue counts
+- List of columns from Phase 2
+- Quality score widget
 - "Begin Remediation →" button
 
-**Implementation:**
-- Route: `GET /api/phase3/content` (returns HTML)
-- JavaScript: `shared/js/phase3.js`
-- Loads configuration from `GET /api/phase3/configuration`
-- Displays columns user kept in Phase 2
-- Shows removed columns are gone
-- Preserves type changes and checkbox selections
-
-#### 2. Column Detail View (`/phase3/column/:columnName`) - NEW: November 16, 2025
-**Purpose:** Three-panel interface for column remediation
-
-**What User Sees:**
-- **Left Panel (20%)**: Column navigation list with status
+#### 2. Column Detail View (`/phase3/column/:columnName`)
+- **Left Panel (20%)**: Column navigation with status
 - **Middle Panel (50%)**: Column details, proposals, actions
 - **Right Panel (30%)**: Token usage tracker
-
-**Implementation:**
-- Route: `GET /phase3/column/:columnName` (returns dedicated HTML page)
-- JavaScript: `shared/js/phase3-column.js` (24KB)
-- CSS: `shared/css/phase3-column.css` (12KB)
-- Mock data for AI proposals (ready for Claude API)
-- Auto-advance workflow with success animations
-
----
-
-## Three-Panel Interface (Column Detail)
-
-### Left Panel - Column Navigation (20% width)
-
-**Header:**
-- Title: "Columns"
-- Subtitle: "Click to navigate"
-- Background: ServiceNow green (#74a290ff)
-
-**Column List:**
-- Scrollable list of all columns
-- Each item shows:
-  - Column name (bold)
-  - Column type + record count
-- Visual states:
-  - **Active**: Green background (#74a290ff), black text
-  - **Completed**: Dimmed opacity, green checkmark (✓)
-  - **Pending**: Normal state, hover effect
-- Click any column to jump to it
-
-**Styling:**
-- Dark background (#111)
-- Border-right: 2px solid #333
-- Hover effect: border color changes to green
-
-### Middle Panel - Column Details & Proposals (50% width)
-
-**Header Section:**
-- Column name (h1, green color)
-- Type badge (e.g., "STRING", "NUMBER")
-- Styled with rounded corners and green border
-
-**Statistics Grid (3 columns):**
-- Total Records
-- Empty Records  
-- Duplicates
-- Each stat card has label + large value in green
-
-**Data Preview Section:**
-- Title: "Data Preview"
-- Table showing sample values:
-  - Row number column
-  - Value column
-  - Clean table styling with alternating row hover
-- Limited to first 10 rows
-
-**AI Proposals Section:**
-- Title: "AI Remediation Proposals"
-- Multiple proposal cards, each showing:
-  - **Proposal title** (e.g., "Standardize Operating System Names")
-  - **Confidence badge** (e.g., "95% Confidence")
-  - **Description** explaining the remediation
-  - **Statistics grid** (2 columns):
-    - Records Affected
-    - Expected Improvement
-- Card styling:
-  - Dark background with 2px border
-  - Hover effect: green border glow
-  - Rounded corners
-
-**Footer Actions:**
-- Two buttons:
-  - "Skip Column" (secondary style - transparent with green border)
-  - "Apply Changes" (primary style - green background, black text)
-- Right-aligned button group
-
-### Right Panel - Token Tracker (30% width)
-
-**Header:**
-- Title: "Token Usage"
-- Subtitle: "Track API consumption"
-- Dark background
-
-**Token Summary Cards (3 cards):**
-1. **Session Total**
-   - Large number showing total tokens used
-   - Subtext: "tokens this session"
-   
-2. **Current Column**
-   - Tokens used for current column
-   - Subtext: "tokens for this column"
-   
-3. **Remaining Budget**
-   - Tokens left in budget
-   - Subtext: "of 10,000 tokens"
-   - Progress bar showing usage percentage
-
-**Token History:**
-- Title: "Token History"
-- Scrollable list of past columns
-- Each history item shows:
-  - Column name
-  - Token count in green
-  - Timestamp
-- Border-left accent in green
-
-**Styling:**
-- Dark background (#111)
-- Border-left: 2px solid #333
-- Scrollable content area
-
----
-
-## User Flow
-
-### Complete Workflow
-
-```
-LANDING PAGE (/phase3)
-    ↓
-User reviews column list
-User clicks "Begin Remediation →"
-    ↓
-NAVIGATE TO: /phase3/column/[FirstColumnName]
-    ↓
-THREE-PANEL VIEW LOADS
-    ↓
-Left: Shows all columns, first is active
-Middle: Shows column details + mock AI proposals
-Right: Shows token tracking (session starts at 0)
-    ↓
-User reviews proposals in middle panel
-User clicks "Apply Changes"
-    ↓
-SUCCESS ANIMATION (1 second)
-- Full-screen overlay with green checkmark
-- "Changes Applied Successfully!"
-- "Loading next column..."
-    ↓
-AUTO-ADVANCE TO NEXT COLUMN
-- Left panel: Previous marked complete (✓), next becomes active
-- Middle panel: Loads next column details
-- Right panel: Updates token history with previous column
-    ↓
-REPEAT FOR ALL COLUMNS
-    ↓
-AFTER LAST COLUMN
-    ↓
-COMPLETION SCREEN
-- Celebration icon (🎉)
-- "All Columns Remediated!"
-- Stats grid showing:
-  - Total columns processed
-  - Total tokens used  
-  - Quality improvement
-- "Continue to Phase 4 →" button
-```
-
-### Navigation Options
-
-**During Remediation:**
-- Click any column in left panel to jump to it
-- Click "Skip Column" to advance without changes
-- Click "Apply Changes" to save and auto-advance
-
-**Completion:**
-- After last column, completion screen appears automatically
-- Click "Continue to Phase 4 →" to proceed
-
----
-
-## Mock Data Structure
-
-### Mock Column Data
-```javascript
-{
-    name: "Operating System",
-    type: "string",
-    stats: {
-        totalRecords: 1500,
-        emptyRecords: 10,
-        duplicates: 25
-    },
-    preview: [
-        { row: 1, value: "Windows 10 Pro" },
-        { row: 2, value: "Ubuntu 20.04 LTS" },
-        // ... up to 10 rows
-    ]
-}
-```
-
-### Mock AI Proposals
-```javascript
-{
-    proposals: [
-        {
-            title: "Standardize Operating System Names",
-            confidence: "95%",
-            description: "Normalize OS names to consistent format...",
-            stats: {
-                recordsAffected: 145,
-                expectedImprovement: "+8%"
-            }
-        },
-        {
-            title: "Fix Version Number Formatting",
-            confidence: "88%",
-            description: "Standardize version numbers to X.Y.Z format...",
-            stats: {
-                recordsAffected: 78,
-                expectedImprovement: "+4%"
-            }
-        }
-    ]
-}
-```
-
-### Mock Token Usage
-```javascript
-{
-    sessionTotal: 2450,
-    currentColumn: 380,
-    remainingBudget: 7550,
-    budgetTotal: 10000,
-    history: [
-        { column: "Serial Number", tokens: 420, timestamp: "..." },
-        { column: "Manufacturer", tokens: 350, timestamp: "..." },
-        { column: "Model", tokens: 390, timestamp: "..." }
-    ]
-}
-```
-
----
-
-## Implementation Details
-
-### File Structure
-
-**New Files (November 16, 2025):**
-```
-shared/
-├── css/
-│   └── phase3-column.css        (12KB) - Three-panel layout styles
-└── js/
-    └── phase3-column.js         (24KB) - Column detail controller
-```
-
-**Modified Files:**
-```
-server.js                        - Added /phase3/column/:columnName route
-shared/js/phase3.js             - Updated "Begin Remediation" navigation
-```
-
-### Server Route
-
-```javascript
-// GET /phase3/column/:columnName
-app.get('/phase3/column/:columnName', (req, res) => {
-    const html = `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Phase 3: Column Remediation - Excel Analyzer</title>
-            <link rel="stylesheet" href="/shared/css/phase3-column.css">
-        </head>
-        <body>
-            <div class="three-panel-layout">
-                <div id="left-panel" class="left-panel"></div>
-                <div id="middle-panel" class="middle-panel"></div>
-                <div id="right-panel" class="right-panel"></div>
-            </div>
-            
-            <script type="module" src="/shared/js/phase3-column.js"></script>
-        </body>
-        </html>
-    `;
-    
-    res.send(html);
-});
-```
-
-### JavaScript Controller Structure
-
-**phase3-column.js:**
-```javascript
-// Main controller object
-const Phase3ColumnController = {
-    currentColumnIndex: 0,
-    columns: [],
-    
-    init() {
-        this.loadConfiguration();
-        this.renderAllPanels();
-    },
-    
-    loadConfiguration() {
-        // Fetch from /api/phase3/configuration
-        // Currently uses mock data
-    },
-    
-    renderLeftPanel() {
-        // Column navigation list
-    },
-    
-    renderMiddlePanel() {
-        // Column details + proposals
-    },
-    
-    renderRightPanel() {
-        // Token tracker
-    },
-    
-    handleApplyChanges() {
-        // Show success animation
-        // Auto-advance to next column
-    },
-    
-    handleSkipColumn() {
-        // Move to next without changes
-    },
-    
-    handleColumnClick(index) {
-        // Jump to specific column
-    },
-    
-    showSuccessAnimation() {
-        // 1-second overlay with checkmark
-    },
-    
-    showCompletionScreen() {
-        // Final celebration screen
-    }
-};
-```
-
-### CSS Architecture
-
-**Layout System:**
-```css
-.three-panel-layout {
-    display: flex;
-    height: 100vh;
-    width: 100vw;
-}
-
-.left-panel   { width: 20%; }  /* Column list */
-.middle-panel { width: 50%; }  /* Details + proposals */
-.right-panel  { width: 30%; }  /* Token tracker */
-```
-
-**Scrolling:**
-- Each panel has `overflow-y: auto` for independent scrolling
-- Custom scrollbar styling (dark theme)
-
-**Animations:**
-- Success overlay: fadeIn (0.3s)
-- Success message: scaleIn (0.5s)
-- Success icon: bounce (0.6s)
-- Completion icon: pulse (2s infinite)
-
----
-
-## Current Status
-
-### ✅ Completed (November 16, 2025)
-
-**Landing Page:**
-- ✅ Explanation with 4-step horizontal process
-- ✅ Configuration loading from Phase 2
-- ✅ Persistent quality score widget
-- ✅ Column list preview with types and issues
-- ✅ "Begin Remediation" button with navigation
-
-**Column Detail Interface:**
-- ✅ Three-panel layout (20% | 50% | 30%)
-- ✅ Left panel: Column navigation with active/completed states
-- ✅ Middle panel: Column details, statistics, data preview, AI proposals
-- ✅ Right panel: Token usage tracking with history
-- ✅ Mock data for all sections
-- ✅ Auto-advance workflow
-- ✅ Success animation (1-second overlay)
-- ✅ Completion screen with stats
-- ✅ Responsive scrolling per panel
-- ✅ Dark theme styling with ServiceNow green accents
-- ✅ Hover effects and transitions
-
-**Technical:**
-- ✅ Route: `/phase3/column/:columnName`
-- ✅ Dedicated CSS file with complete styling
-- ✅ Modular JavaScript controller
-- ✅ MIME type handling for CSS files
-
-### ⏳ Pending (Backend Integration)
-
-**Data Loading:**
-- ⏳ Replace mock column data with real data from Phase 2
-- ⏳ Load actual column values for data preview
-- ⏳ Connect to uploaded Excel data
-
-**AI Integration:**
-- ⏳ Connect to Claude API for real proposals
-- ⏳ Generate remediation suggestions based on column analysis
-- ⏳ Calculate real confidence scores
-- ⏳ Update token usage with actual API calls
-
-**Data Persistence:**
-- ⏳ Save applied changes back to server
-- ⏳ Update quality score based on real fixes
-- ⏳ Persist remediated data for Phase 4
-- ⏳ Track which columns are truly completed
-
-**Quality Score:**
-- ⏳ Recalculate after each column remediation
-- ⏳ Update persistent widget across all panels
-- ⏳ Show real improvement percentage
 
 ---
 
 ## API Endpoints
 
-### Existing
-- `GET /api/phase3/content` - Landing page HTML
-- `GET /api/phase3/configuration` - Phase 2 configuration
-- `GET /phase3/column/:columnName` - Column detail HTML
+### GET /api/phase3/configuration
+Returns Phase 2 configuration with user modifications.
 
-### Needed for Backend Integration
+### GET /phase3/column/:columnName
+Returns three-panel HTML for column remediation.
 
-#### GET /api/phase3/column-data/:columnName
-**Purpose:** Get full column data including all values
-
-**Request:**
-```
-GET /api/phase3/column-data/Operating%20System
-```
-
-**Response:**
-```javascript
-{
-    name: "Operating System",
-    type: "string",
-    stats: {
-        totalRecords: 1500,
-        emptyRecords: 10,
-        duplicates: 25,
-        uniqueValues: 120
-    },
-    values: [
-        "Windows 10 Pro",
-        "Ubuntu 20.04 LTS",
-        // ... all 1500 values
-    ],
-    issues: {
-        misspellings: 15,
-        inconsistentCase: 5,
-        extraWhitespace: 10
-    }
-}
-```
-
-#### POST /api/phase3/generate-proposals
-**Purpose:** Call Claude API to generate remediation proposals
+### POST /api/phase3/apply-fixes
+**Purpose:** Apply fixes to column data and update metadata.
 
 **Request:**
 ```javascript
 {
-    columnName: "Operating System",
-    columnType: "string",
-    values: [...],
-    issues: {...}
-}
-```
-
-**Response:**
-```javascript
-{
-    proposals: [
-        {
-            title: "Standardize Operating System Names",
-            confidence: 95,
-            description: "...",
-            affectedRecords: 145,
-            expectedImprovement: 8,
-            actions: [
-                { from: "Win 10", to: "Windows 10 Pro" },
-                { from: "ubuntu", to: "Ubuntu 20.04 LTS" }
-            ]
-        }
-    ],
-    tokensUsed: 380
-}
-```
-
-#### POST /api/phase3/apply-changes
-**Purpose:** Apply remediation changes to data
-
-**Request:**
-```javascript
-{
-    columnName: "Operating System",
-    changes: [
-        { row: 15, oldValue: "Win 10", newValue: "Windows 10 Pro" },
-        { row: 42, oldValue: "ubuntu", newValue: "Ubuntu 20.04 LTS" }
+    columnName: "SerialNumber",
+    actionType: "duplicates",  // or "whitespace", "capitalization", etc.
+    fixes: [
+        { rowNumber: 15, currentValue: "SN001", suggestedFix: "" },
+        { rowNumber: 20, currentValue: "SN001", suggestedFix: "" }
     ]
 }
 ```
@@ -552,99 +117,212 @@ GET /api/phase3/column-data/Operating%20System
 ```javascript
 {
     success: true,
-    updatedColumn: {...},
-    newQualityScore: 87,
-    improvement: 3
+    fixedCount: 4,
+    message: "Fixed 4 rows"
+}
+```
+
+**What Happens:**
+1. Load Excel file from disk
+2. For duplicates: Mark rows with `_ROW_DELETE = "DUPLICATE"`
+3. For other fixes: Apply transformation to column data
+4. Update `_CHANGES_LOG` for each fixed row
+5. Save Excel file back to disk
+
+### POST /api/phase3/get-duplicate-rows
+**Purpose:** Fetch all rows with a specific duplicate value.
+
+**Request:**
+```javascript
+{
+    columnName: "SerialNumber",
+    duplicateValue: "SN001"
+}
+```
+
+**Response:**
+```javascript
+{
+    rows: [
+        { rowNumber: 10, data: { SerialNumber: "SN001", Name: "John", ... } },
+        { rowNumber: 15, data: { SerialNumber: "SN001", Name: "Jane", ... } },
+        { rowNumber: 20, data: { SerialNumber: "SN001", Name: "Bob", ... } }
+    ]
+}
+```
+
+### POST /api/phase3/delete-row
+**Purpose:** Mark a single row for deletion (used by duplicate modal).
+
+**Request:**
+```javascript
+{
+    rowNumber: 15
+}
+```
+
+**What Happens:**
+1. Set `_ROW_DELETE = "DUPLICATE"` for that row
+2. Update `_CHANGES_LOG` with deletion action
+
+### POST /api/phase3/update-cell
+**Purpose:** Update a single cell value (used by modals).
+
+**Request:**
+```javascript
+{
+    rowNumber: 15,
+    columnName: "SerialNumber",
+    newValue: "SN002"
 }
 ```
 
 ---
 
+## Key Files
+
+### Backend
+- `phase-3-ai-remediation/api/config.js` - Configuration endpoints
+- `phase-3-ai-remediation/api/actions.js` - Action generation
+- `phase-3-ai-remediation/api/fixes.js` - Apply fixes ⭐ (most important)
+
+### Frontend
+- `shared/js/phase3.js` - Landing page logic
+- `shared/js/phase3-column.js` - Column detail controller
+- `shared/js/duplicate-modal.js` - Duplicate comparison modal
+- `shared/js/reference-modal.js` - Reference validation modal
+- `shared/css/phase3-column.css` - Three-panel styles
+- `shared/css/duplicate-modal.css` - Modal styles
+- `shared/css/reference-modal.css` - Modal styles
+
+---
+
+## Helper Functions in fixes.js
+
+### ensureChangesLogColumn(worksheet)
+Creates `_CHANGES_LOG` column if it doesn't exist.
+```javascript
+function ensureChangesLogColumn(worksheet) {
+    const headerRow = worksheet.getRow(1);
+    let changesLogIndex = -1;
+    
+    headerRow.eachCell((cell, colNumber) => {
+        if (cell.value === '_CHANGES_LOG') {
+            changesLogIndex = colNumber;
+        }
+    });
+    
+    if (changesLogIndex === -1) {
+        const lastCol = headerRow.actualCellCount + 1;
+        headerRow.getCell(lastCol).value = '_CHANGES_LOG';
+        changesLogIndex = lastCol;
+    }
+    
+    return changesLogIndex;
+}
+```
+
+### updateChangesLog(worksheet, rowNumber, columnName, action)
+Updates the `_CHANGES_LOG` cell for a specific row.
+```javascript
+function updateChangesLog(worksheet, rowNumber, columnName, action) {
+    const changesLogIndex = ensureChangesLogColumn(worksheet);
+    const row = worksheet.getRow(rowNumber);
+    const cell = row.getCell(changesLogIndex);
+    
+    // Parse existing value: "Email:changed,Name:kept"
+    let entries = {};
+    if (cell.value) {
+        cell.value.split(',').forEach(entry => {
+            const [col, act] = entry.split(':');
+            entries[col.trim()] = act.trim();
+        });
+    }
+    
+    // Add/update this column's action
+    entries[columnName] = action;
+    
+    // Rebuild string
+    cell.value = Object.entries(entries)
+        .map(([col, act]) => `${col}:${act}`)
+        .join(',');
+}
+```
+
+### ensureRowDeleteColumn(worksheet)
+Creates `_ROW_DELETE` column if it doesn't exist.
+
+### markRowForDeletion(worksheet, rowNumber, reason)
+Marks a row for deletion (used for duplicates).
+```javascript
+function markRowForDeletion(worksheet, rowNumber, reason) {
+    const deleteColumnIndex = ensureRowDeleteColumn(worksheet);
+    const row = worksheet.getRow(rowNumber);
+    row.getCell(deleteColumnIndex).value = reason || 'DELETE';
+    console.log(`🗑️ Marked row ${rowNumber} for deletion: ${reason}`);
+}
+```
+
+---
+
+## Action Types
+
+| Action Type | What It Does | Updates _CHANGES_LOG | Updates _ROW_DELETE |
+|-------------|--------------|---------------------|---------------------|
+| `duplicates` | Marks duplicate rows for deletion | ✅ `deleted` | ✅ `DUPLICATE` |
+| `empty` | Fills empty cells with default | ✅ `changed` | ❌ |
+| `whitespace` | Trims whitespace | ✅ `changed` | ❌ |
+| `capitalization` | Standardizes case | ✅ `changed` | ❌ |
+| `reference-validation` | Updates to valid ref | ✅ `changed` | ❌ |
+
+---
+
 ## Testing Checklist
 
-### ✅ UI Framework Testing (Complete)
-- [x] Landing page loads from Phase 2
-- [x] "Begin Remediation" navigates to first column
-- [x] Three-panel layout renders correctly
-- [x] Left panel shows all columns
-- [x] Middle panel shows column details
-- [x] Right panel shows token tracker
-- [x] "Apply Changes" shows success animation
-- [x] Auto-advance to next column works
-- [x] Last column shows completion screen
-- [x] Completion screen has "Continue to Phase 4" button
-- [x] CSS loads correctly (no MIME errors)
-- [x] Scrolling works independently per panel
-- [x] Column navigation (clicking left panel) works
-- [x] "Skip Column" button advances
+### Metadata Tracking
+- [ ] Fix a column → Check server logs show only changed row numbers
+- [ ] Open Excel file → Verify `_CHANGES_LOG` has correct entries
+- [ ] Only fixed rows should have `_CHANGES_LOG` values
 
-### ⏳ Backend Integration Testing (Pending)
-- [ ] Real column data loads from Phase 2
-- [ ] Data preview shows actual values
-- [ ] Claude API generates real proposals
-- [ ] Token usage updates with real counts
-- [ ] Applied changes save to server
-- [ ] Quality score recalculates correctly
-- [ ] Completion stats show real improvement
-- [ ] Data persists to Phase 4
+### Duplicate Handling
+- [ ] Fix duplicates → Rows marked with `_ROW_DELETE = "DUPLICATE"`
+- [ ] Kept row is NOT marked
+- [ ] `_CHANGES_LOG` shows `deleted` for marked rows
+
+### Modal Testing
+- [ ] Click "Compare" on duplicate issue → Duplicate modal opens
+- [ ] Delete a row in modal → Row marked for deletion
+- [ ] Edit a cell in modal → Value updated in Excel
+- [ ] Click "Select Match" on reference issue → Reference modal opens
+- [ ] Select a ServiceNow value → Cell updated
 
 ---
 
 ## Known Issues & Solutions
 
-### Issue: CSS Not Loading (FIXED - November 16, 2025)
-**Symptom:** Browser console shows MIME type error, CSS returns HTML
+### Issue: All rows showing as changed
+**Cause:** Old code tracked every row, not just changed ones.
+**Solution:** Use `fixedRows = new Set()` to track only modified rows.
 
-**Root Cause:** Express wasn't setting `Content-Type: text/css` for CSS files
+### Issue: Duplicate rows not marked for deletion
+**Cause:** Old code removed rows immediately instead of marking.
+**Solution:** Use `markRowForDeletion()` instead of data removal.
 
-**Solution:** Added middleware in `server.js`:
-```javascript
-app.use((req, res, next) => {
-    if (req.path.endsWith('.js')) {
-        res.type('application/javascript');
-    } else if (req.path.endsWith('.css')) {
-        res.type('text/css');
-    }
-    next();
-});
-```
-
-**Important:** This middleware must come BEFORE `express.static()` middleware.
+### Issue: _CHANGES_LOG format inconsistent
+**Cause:** Direct string manipulation instead of parsing.
+**Solution:** Parse to object, update, rebuild string.
 
 ---
 
 ## Next Steps
 
-### Immediate Priority
-1. **Load Real Data** - Replace mock data with actual column values from Phase 2
-2. **Claude API Integration** - Connect to Claude API for real proposals
-3. **Data Persistence** - Save applied changes back to server
-4. **Quality Score Updates** - Recalculate with real fixes
-
-### Short Term
-1. **Token Budget Management** - Track real API usage against budget
-2. **Error Handling** - Handle API failures gracefully
-3. **Undo Functionality** - Allow reverting applied changes
-4. **Batch Operations** - Apply proposals to multiple columns at once
-
-### Long Term
-1. **Custom Proposals** - Allow manual remediation rules
-2. **Learning System** - Remember user preferences for future files
-3. **Export Reports** - Detailed remediation reports
-4. **Comparison View** - Before/after side-by-side comparison
+- ⏳ Connect to Claude API for real proposals
+- ⏳ Calculate real confidence scores
+- ⏳ Track actual token usage
+- ⏳ Add undo functionality
+- ⏳ Add batch operations for similar issues
 
 ---
 
-## Notes
-
-- Mock data is comprehensive and ready for Claude API integration
-- UI framework is complete and production-ready
-- Three-panel layout scales well across screen sizes
-- Token tracking structure supports real API cost monitoring
-- Auto-advance UX provides smooth, efficient workflow
-- Completion screen provides satisfying closure to remediation process
-
----
-
-**Last Updated**: November 16, 2025  
-**Next Review**: After Claude API integration complete
+**Last Updated**: November 24, 2025  
+**Phase Owner**: Fed @ Fujitsu Australia

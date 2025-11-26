@@ -644,6 +644,45 @@ body {
     background-color: #f8f9fa;
 }
 
+/* Button Sizes */
+.btn-xs {
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.8rem !important;
+    border-radius: 3px !important;
+    white-space: nowrap;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-xs.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-xs.btn-success:hover {
+    background-color: #218838;
+}
+
+.btn-xs.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-xs.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-xs.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn-xs.btn-warning:hover {
+    background-color: #e0a800;
+}
+
 .form-actions {
     display: flex;
     gap: 1rem;
@@ -735,4 +774,496 @@ body {
     font-size: 0.85rem;
     color: var(--sn-text-secondary);
     line-height: 1.4;
+}
+
+/* ========================================
+   PHASE 4: REVIEW PANEL STYLES
+   ======================================== */
+
+/* Review Panel Container */
+.review-panel {
+    background: var(--sn-white);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.5s ease;
+}
+
+/* Fixed Validated Button - Top Right */
+.validated-btn {
+    position: fixed;
+    top: 100px;
+    right: 40px;
+    background: linear-gradient(135deg, #28a745 0%, #20893a 100%);
+    color: white;
+    border: none;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    z-index: 999;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.validated-btn:hover {
+    background: linear-gradient(135deg, #20893a 0%, #1e7e34 100%);
+    box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+    transform: translateY(-2px);
+}
+
+.validated-btn:active {
+    transform: translateY(0);
+}
+
+/* Panel Header */
+.review-panel .panel-header {
+    background: linear-gradient(135deg, var(--sn-primary) 0%, var(--sn-primary-dark) 100%);
+    color: white;
+    padding: 2rem;
+    text-align: center;
+}
+
+.review-panel .panel-header h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.review-subtitle {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+/* Review Summary Stats */
+.review-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    padding: 2rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid var(--sn-border);
+}
+
+.summary-stat {
+    text-align: center;
+}
+
+.summary-stat .stat-value {
+    display: block;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--sn-primary);
+    line-height: 1;
+}
+
+.summary-stat .stat-label {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--sn-text-secondary);
+    margin-top: 0.5rem;
+}
+
+/* Search and Filter Controls */
+.review-controls {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem 2rem;
+    background: white;
+    border-bottom: 1px solid var(--sn-border);
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--sn-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--sn-primary);
+    box-shadow: 0 0 0 3px rgba(129, 181, 161, 0.1);
+}
+
+.filter-select {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--sn-border);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    background: white;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+/* Review Table Container */
+.review-table-container {
+    padding: 2rem;
+    max-height: 600px;
+    overflow: auto;
+}
+
+/* Review Table - Spreadsheet View */
+.review-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.review-table thead {
+    position: sticky;
+    top: 0;
+    background: var(--sn-secondary);
+    color: white;
+    z-index: 10;
+}
+
+.review-table th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--sn-primary);
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+.review-table tbody tr {
+    border-bottom: 1px solid var(--sn-border);
+    transition: background-color 0.2s;
+}
+
+.review-table tbody tr:hover {
+    background-color: #f0f7ff !important;
+}
+
+.review-table td {
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+    min-width: 120px;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+}
+
+/* Table Cell Highlighting */
+.cell-changed {
+    background-color: #fff3cd !important;
+    border-left: 3px solid #ffc107 !important;
+    font-weight: 600;
+}
+
+.cell-rejected {
+    background-color: #f8d7da !important;
+    border-left: 3px solid #dc3545 !important;
+    font-weight: 600;
+}
+
+.cell-edited {
+    background-color: #d1ecf1 !important;
+    border-left: 3px solid #17a2b8 !important;
+    font-weight: 600;
+}
+
+.row-has-changes {
+    background-color: #fffef7;
+}
+
+.change-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.7rem;
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.edited-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 0.7rem;
+    color: #17a2b8;
+    font-weight: bold;
+}
+
+/* Row Number Column */
+.row-number {
+    font-weight: 600;
+    color: var(--sn-text-secondary);
+    min-width: 60px !important;
+    max-width: 60px !important;
+    text-align: center;
+}
+
+/* Review Table Legend */
+.review-footer {
+    padding: 1.5rem 2rem;
+    background: #f8f9fa;
+    border-top: 1px solid var(--sn-border);
+}
+
+.review-note {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--sn-text-secondary);
+}
+
+/* Action Badges */
+.badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.badge-success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.badge-warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.badge-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.badge-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.badge-secondary {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+/* Edit Button */
+.btn-icon {
+    background: none;
+    border: 1px solid var(--sn-border);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--sn-text-secondary);
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background-color: var(--sn-primary);
+    border-color: var(--sn-primary);
+    color: white;
+}
+
+/* Toast Notification */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #28a745;
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 10000;
+    font-weight: 500;
+    opacity: 1;
+    transition: opacity 0.3s;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .validated-btn {
+        position: relative;
+        top: auto;
+        right: auto;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .review-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .review-controls {
+        flex-direction: column;
+    }
+    
+    .filter-select {
+        width: 100%;
+    }
+    
+    .review-summary {
+        grid-template-columns: 1fr;
+    }
+    
+    .review-table-container {
+        padding: 1rem;
+    }
+    
+    .review-table {
+        font-size: 0.75rem;
+    }
+    
+    .review-table th,
+    .review-table td {
+        padding: 0.5rem;
+        min-width: 100px;
+    }
+}
+
+/* ========================================
+   ROW DELETION STYLING (RED HIGHLIGHTING)
+   ======================================== */
+
+/* Rows marked for deletion - RED background with strikethrough */
+.row-delete {
+    background-color: #ffebee !important;
+    border-left: 4px solid #f44336 !important;
+    transition: all 0.3s ease;
+}
+
+.row-delete:hover {
+    background-color: #ffcdd2 !important;
+}
+
+.row-delete td {
+    color: #666;
+    text-decoration: line-through;
+    font-style: italic;
+}
+
+/* Badge for deleted rows */
+.badge-delete {
+    background: #f44336;
+    color: white;
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.badge-delete::before {
+    content: '🗑️';
+    font-size: 0.9rem;
+}
+
+/* Badge for deleted action */
+.badge-deleted {
+    background: #f44336;
+    color: white;
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Edit button disabled for deleted rows */
+.row-delete .btn-icon {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Warning box for deletion count */
+.deletion-warning {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.deletion-warning-icon {
+    font-size: 2rem;
+    color: #f44336;
+}
+
+.deletion-warning-text {
+    flex: 1;
+}
+
+.deletion-warning-count {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #f44336;
+}
+
+/* Phase 4 summary stat for deletions */
+#deletedCount {
+    color: #f44336 !important;
+    font-weight: bold;
+}
+
+/* Animation for row deletion highlighting */
+@keyframes pulseRed {
+    0%, 100% {
+        background-color: #ffebee;
+    }
+    50% {
+        background-color: #ffcdd2;
+    }
+}
+
+.row-delete.pulse {
+    animation: pulseRed 2s ease-in-out infinite;
+}
+
+/* Filter dropdown styling for "To Delete" option */
+.filter-select option[value="deleted"] {
+    color: #f44336;
+    font-weight: bold;
+}
+
+/* Table row number for deleted rows */
+.row-delete .row-number {
+    font-weight: bold;
+    color: #f44336;
+}
+
+/* Mobile responsiveness for row deletion */
+@media (max-width: 768px) {
+    .row-delete {
+        border-left-width: 2px;
+    }
+    
+    .badge-delete {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .deletion-warning {
+        flex-direction: column;
+        text-align: center;
+    }
 }

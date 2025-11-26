@@ -1,0 +1,247 @@
+/* Reference Validation Modal Styles */
+.reference-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.2s;
+}
+
+.reference-modal {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    max-width: 900px;
+    width: 90%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s;
+}
+
+.reference-modal-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.reference-modal-header h2 {
+    margin: 0 0 0.5rem 0;
+    color: #2C3E50;
+    font-size: 1.5rem;
+}
+
+.reference-modal-header .subtitle {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+.reference-modal-body {
+    padding: 2rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.reference-modal-footer {
+    padding: 1rem 2rem;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+/* Comparison Layout */
+.reference-comparison-container {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.reference-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.reference-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2C3E50;
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-icon {
+    font-size: 1.3rem;
+}
+
+.status-error {
+    color: #dc3545;
+}
+
+.status-success {
+    color: #28a745;
+}
+
+/* Value Cards */
+.reference-value-card {
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 2px solid #dee2e6;
+    background: #f8f9fa;
+    transition: all 0.2s;
+}
+
+.reference-value-card.error-card {
+    background: #fff5f5;
+    border-color: #dc3545;
+}
+
+.reference-value-card.success-card {
+    background: #f0fff4;
+    border-color: #28a745;
+}
+
+.reference-value-card.warning-card {
+    background: #fffbf0;
+    border-color: #ffc107;
+}
+
+.reference-value-card.clickable {
+    cursor: pointer;
+}
+
+.reference-value-card.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #007bff;
+}
+
+.reference-value-text {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #2C3E50;
+    margin-bottom: 0.5rem;
+}
+
+.reference-value-meta {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.75rem;
+}
+
+.reference-value-status {
+    font-size: 0.95rem;
+    color: #dc3545;
+    font-weight: 500;
+}
+
+.btn-select-match {
+    width: 100%;
+    padding: 0.75rem;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-select-match:hover {
+    background: #218838;
+}
+
+/* Arrow */
+.reference-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+}
+
+.arrow-icon {
+    font-size: 3rem;
+    font-weight: bold;
+}
+
+.arrow-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: 0.5rem;
+}
+
+/* Info Box */
+.reference-info-box {
+    padding: 1rem;
+    background: #e7f3ff;
+    border-left: 4px solid #2196F3;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #014361;
+}
+
+.reference-info-box.warning {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+    color: #856404;
+}
+
+.reference-info-box strong {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+/* Manual Entry */
+.reference-manual-entry {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 2px dashed #dee2e6;
+}
+
+.reference-manual-entry h4 {
+    font-size: 1rem;
+    color: #2C3E50;
+    margin: 0 0 1rem 0;
+}
+
+.manual-entry-controls {
+    display: flex;
+    gap: 1rem;
+}
+
+.manual-entry-controls .form-input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.manual-entry-controls .btn {
+    padding: 0.75rem 1.5rem;
+    white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .reference-comparison-container {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    .reference-arrow {
+        transform: rotate(90deg);
+    }
+}

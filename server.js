@@ -210,7 +210,7 @@ app.use(phase3FixesRoutes);
 app.use(phase4Routes);
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log('═══════════════════════════════════════════════════════');
     console.log('   📊 EXCEL ANALYZER - Modular Architecture');
     console.log('═══════════════════════════════════════════════════════');

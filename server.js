@@ -7,13 +7,24 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 
+
+console.log('=== Step 2: Core imports done ===');
+
 // Import phase routes
 import phase1Routes from './phase-1-upload-profiling/api/routes.js';
+console.log('=== Step 3: Phase 1 loaded ===');
 import phase2Routes from './phase-2-analysis/api/routes.js';
+console.log('=== Step 4: Phase 2 loaded ===');
 import phase3ConfigRoutes from './phase-3-ai-remediation/api/config.js';
+console.log('=== Step 5: Phase 3 config loaded ===');
 import phase3ActionsRoutes from './phase-3-ai-remediation/api/actions.js';
+console.log('=== Step 6: Phase 3 actions loaded ===');
 import phase3FixesRoutes from './phase-3-ai-remediation/api/fixes.js';
+console.log('=== Step 7: Phase 3 fixes loaded ===');
 import phase4Routes from './phase-4-export/api/routes.js';
+console.log('=== Step 8: Phase 4 loaded ===');
+
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

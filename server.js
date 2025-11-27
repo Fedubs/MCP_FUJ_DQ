@@ -1,11 +1,12 @@
 // ===== NEW MODULAR SERVER.JS =====
+console.log('=== Step 1: Starting server.js ===');
+
 // Import dependencies
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import Anthropic from '@anthropic-ai/sdk';
 
 console.log('=== Step 2: Core imports done ===');
 
@@ -29,45 +30,54 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize Anthropic client
+console.log(`=== Step 9: Using PORT ${PORT} ===`);
+
+// Initialize Anthropic client lazily (only when needed)
 let anthropic = null;
-if (process.env.ANTHROPIC_API_KEY) {
-    anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY
-    });
-    console.log('✓ Anthropic client initialized');
-} else {
-    console.warn('⚠ ANTHROPIC_API_KEY not set - AI features disabled');
-}
+const getAnthropic = async () => {
+    if (!anthropic && process.env.ANTHROPIC_API_KEY) {
+        const { default: Anthropic } = await import('@anthropic-ai/sdk');
+        anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY
+        });
+        console.log('✓ Anthropic client initialized on demand');
+    }
+    return anthropic;
+};
 
 // Shared state - accessible via req.app.locals in routes
 app.locals.uploadedData = null;
 app.locals.phase3Configuration = null;
 app.locals.rawExcelData = {};
 app.locals.uploadedFilePath = null;
-app.locals.anthropic = anthropic;
-app.locals.phase3Storage = { rawData: {} }; // For duplicate modal and fixes
-
-// Phase 3 → Phase 4 Decision Tracking
-app.locals.phase3Decisions = new Map(); // Track user decisions for Phase 4 visualization
+app.locals.getAnthropic = getAnthropic;
+app.locals.anthropic = null; // Will be set lazily
+app.locals.phase3Storage = { rawData: {} };
+app.locals.phase3Decisions = new Map();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Request logging - log ALL requests
+// Request logging
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(`[REQ] ${req.method} ${req.path}`);
     next();
 });
 
-// Health check endpoint
+// Health check - FIRST route
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), port: PORT });
+    console.log('[HEALTH] Health check called');
+    res.status(200).json({ status: 'ok', port: PORT, time: new Date().toISOString() });
 });
 
-// Middleware to set correct MIME types
+// Root route - simple test
+app.get('/test', (req, res) => {
+    res.send('Server is working!');
+});
+
+// MIME types middleware
 app.use((req, res, next) => {
     if (req.path.endsWith('.js')) {
         res.type('application/javascript');
@@ -77,10 +87,10 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve shared static files (CSS, JS)
+// Serve shared static files
 app.use('/shared', express.static(join(__dirname, 'shared')));
 
-// Serve phase folders as static (for frontend files)
+// Serve phase folders as static
 app.use('/phase-1-upload-profiling', express.static(join(__dirname, 'phase-1-upload-profiling')));
 app.use('/phase-2-analysis', express.static(join(__dirname, 'phase-2-analysis')));
 app.use('/phase-3-ai-remediation', express.static(join(__dirname, 'phase-3-ai-remediation')));
@@ -88,10 +98,11 @@ app.use('/phase-4-export', express.static(join(__dirname, 'phase-4-export')));
 
 // Serve main index.html for all phase routes
 app.get(['/', '/phase1', '/phase2', '/phase3', '/phase4'], (req, res) => {
+    console.log(`[PAGE] Serving index.html for ${req.path}`);
     res.sendFile(join(__dirname, 'index.html'));
 });
 
-// Phase 3 column detail route (special HTML page)
+// Phase 3 column detail route
 app.get('/phase3/column/:columnName', (req, res) => {
     const html = `
         <!DOCTYPE html>
@@ -120,19 +131,16 @@ app.get('/phase3/column/:columnName', (req, res) => {
                     </nav>
                 </div>
             </header>
-
             <div class="sn-main-container">
                 <div class="sn-breadcrumb">
                     <span class="breadcrumb-item">Home</span>
                     <span class="breadcrumb-separator">›</span>
                     <span class="breadcrumb-item active">Phase 3: AI Remediation</span>
                 </div>
-
                 <div class="sn-page-header">
                     <h1 class="page-title">AI-Powered Remediation</h1>
                     <div class="page-subtitle">Column-by-column data quality improvement</div>
                 </div>
-
                 <div class="quality-widget" id="qualityWidget">
                     <div class="quality-score-display">
                         <div class="score-value" id="widgetQualityScore">--<span style="font-size: 0.6em;">%</span></div>
@@ -157,65 +165,47 @@ app.get('/phase3/column/:columnName', (req, res) => {
                         </div>
                     </div>
                 </div>
-
                 <div class="three-panel-layout">
                     <div id="left-panel" class="left-panel"></div>
                     <div id="middle-panel" class="middle-panel"></div>
                     <div id="right-panel" class="right-panel"></div>
                 </div>
             </div>
-            
             <script type="module" src="/shared/js/duplicate-modal.js"></script>
             <script type="module" src="/shared/js/reference-modal.js"></script>
             <script type="module" src="/shared/js/phase3-column.js"></script>
         </body>
         </html>
     `;
-    
     res.send(html);
 });
 
-// ===== PHASE 3 → PHASE 4 TRACKING ENDPOINT =====
-// Track user decisions (Keep/Reject/Change) for Phase 4 visualization
+// Phase 3 tracking endpoint
 app.post('/api/phase3/track-decision', (req, res) => {
     try {
         const { rowNumber, columnName, action, originalValue, newValue } = req.body;
-        
-        // Validate required fields
         if (!rowNumber || !columnName || !action) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Missing required fields: rowNumber, columnName, action' 
+                error: 'Missing required fields' 
             });
         }
-        
-        // Create unique key for this cell
         const key = `${rowNumber}-${columnName}`;
-        
-        // Store the decision
         req.app.locals.phase3Decisions.set(key, {
             rowNumber: parseInt(rowNumber),
             columnName,
-            action,              // 'kept', 'rejected', or 'changed'
+            action,
             originalValue,
             newValue,
             timestamp: new Date().toISOString()
         });
-        
-        console.log(`✓ Tracked decision: Row ${rowNumber}, Column "${columnName}", Action: ${action}`);
-        
         res.json({ success: true });
-        
     } catch (error) {
-        console.error('Error tracking decision:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: error.message 
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// ===== USE PHASE ROUTES =====
+// Use phase routes
 app.use(phase1Routes);
 app.use(phase2Routes);
 app.use(phase3ConfigRoutes);
@@ -223,19 +213,37 @@ app.use(phase3ActionsRoutes);
 app.use(phase3FixesRoutes);
 app.use(phase4Routes);
 
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('[ERROR]', err);
+    res.status(500).json({ error: err.message });
+});
+
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('═══════════════════════════════════════════════════════');
-    console.log('   📊 EXCEL ANALYZER - Modular Architecture');
+    console.log('   📊 EXCEL ANALYZER - Running on Railway');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('   Server running on: http://0.0.0.0:' + PORT);
-    console.log('');
-    console.log('   Available Phases:');
-    console.log('   → Phase 1: /phase1 (Upload & Profiling)');
-    console.log('   → Phase 2: /phase2 (Analysis)');
-    console.log('   → Phase 3: /phase3 (AI Remediation)');
-    console.log('   → Phase 3 Detail: /phase3/column/[columnName]');
-    console.log('   → Phase 4: /phase4 (Export)');
-    console.log('   → Health: /health');
+    console.log(`   ✓ Server listening on 0.0.0.0:${PORT}`);
+    console.log('   ✓ Health check: /health');
+    console.log('   ✓ Test: /test');
     console.log('═══════════════════════════════════════════════════════');
+});
+
+// Keep alive logging
+setInterval(() => {
+    console.log(`[ALIVE] Server still running on port ${PORT} at ${new Date().toISOString()}`);
+}, 30000);
+
+// Handle errors
+server.on('error', (err) => {
+    console.error('[SERVER ERROR]', err);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT]', err);
+});
+
+process.on('unhandledRejection', (err) => {
+    console.error('[UNHANDLED]', err);
 });

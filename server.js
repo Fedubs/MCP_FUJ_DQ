@@ -7,7 +7,6 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 
-
 console.log('=== Step 2: Core imports done ===');
 
 // Import phase routes
@@ -24,8 +23,6 @@ console.log('=== Step 7: Phase 3 fixes loaded ===');
 import phase4Routes from './phase-4-export/api/routes.js';
 console.log('=== Step 8: Phase 4 loaded ===');
 
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -33,9 +30,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Initialize Anthropic client
-const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY
-});
+let anthropic = null;
+if (process.env.ANTHROPIC_API_KEY) {
+    anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY
+    });
+    console.log('✓ Anthropic client initialized');
+} else {
+    console.warn('⚠ ANTHROPIC_API_KEY not set - AI features disabled');
+}
 
 // Shared state - accessible via req.app.locals in routes
 app.locals.uploadedData = null;
@@ -52,6 +55,17 @@ app.locals.phase3Decisions = new Map(); // Track user decisions for Phase 4 visu
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request logging - log ALL requests
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), port: PORT });
+});
 
 // Middleware to set correct MIME types
 app.use((req, res, next) => {
@@ -214,23 +228,14 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('═══════════════════════════════════════════════════════');
     console.log('   📊 EXCEL ANALYZER - Modular Architecture');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('   Server running on: http://localhost:' + PORT);
+    console.log('   Server running on: http://0.0.0.0:' + PORT);
     console.log('');
     console.log('   Available Phases:');
-    console.log('   → Phase 1: http://localhost:' + PORT + '/phase1 (Upload & Profiling)');
-    console.log('   → Phase 2: http://localhost:' + PORT + '/phase2 (Analysis)');
-    console.log('   → Phase 3: http://localhost:' + PORT + '/phase3 (AI Remediation)');
-    console.log('   → Phase 3 Detail: http://localhost:' + PORT + '/phase3/column/[columnName]');
-    console.log('   → Phase 4: http://localhost:' + PORT + '/phase4 (Export)');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('');
-    console.log('   📁 Modular Route Files:');
-    console.log('   ✓ Phase 1: phase-1-upload-profiling/api/routes.js');
-    console.log('   ✓ Phase 2: phase-2-analysis/api/routes.js');
-    console.log('   ✓ Phase 3 Config: phase-3-ai-remediation/api/config.js');
-    console.log('   ✓ Phase 3 Actions: phase-3-ai-remediation/api/actions.js');
-    console.log('   ✓ Phase 3 Fixes: phase-3-ai-remediation/api/fixes.js');
-    console.log('   ✓ Phase 4: phase-4-export/api/routes.js');
-    console.log('   ✓ Phase 3→4 Tracking: /api/phase3/track-decision (NEW)');
+    console.log('   → Phase 1: /phase1 (Upload & Profiling)');
+    console.log('   → Phase 2: /phase2 (Analysis)');
+    console.log('   → Phase 3: /phase3 (AI Remediation)');
+    console.log('   → Phase 3 Detail: /phase3/column/[columnName]');
+    console.log('   → Phase 4: /phase4 (Export)');
+    console.log('   → Health: /health');
     console.log('═══════════════════════════════════════════════════════');
 });

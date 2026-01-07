@@ -159,6 +159,13 @@
     background: #c82333;
 }
 
+/* Large Delete Button (when a row is kept) */
+.btn-delete-large {
+    padding: 0.5rem 1.2rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
 .btn-keep-dup {
     background: #28a745;
     color: white;
@@ -282,6 +289,15 @@
 .row-deleted .duplicate-actions-cell,
 .row-deleted .duplicate-row-number {
     background: #f8d7da !important;
+}
+
+.row-edited {
+    background: #fff3cd !important;
+}
+
+.row-edited .duplicate-actions-cell,
+.row-edited .duplicate-row-number {
+    background: #fff3cd !important;
 }
 
 /* Inline Edit */

@@ -25,6 +25,67 @@ const Phase2 = {
         { value: 'cmdb_ci_network_adapter', label: 'Network Adapter (cmdb_ci_network_adapter)' }
     ],
     
+    // Subtypes per column type
+    subtypesByType: {
+        string: [
+            { value: '', label: 'Select format (optional)...' },
+            { value: 'serial-number', label: 'Serial Number' },
+            { value: 'mac-address', label: 'MAC Address' },
+            { value: 'ip-address-v4', label: 'IP Address (IPv4)' },
+            { value: 'ip-address-v6', label: 'IP Address (IPv6)' },
+            { value: 'hostname', label: 'Hostname' },
+            { value: 'fqdn', label: 'FQDN (Fully Qualified Domain Name)' },
+            { value: 'asset-tag', label: 'Asset Tag' },
+            { value: 'location', label: 'Location' },
+            { value: 'name', label: 'Name' },
+            { value: 'model', label: 'Model' },
+            { value: 'manufacturer', label: 'Manufacturer' },
+            { value: 'os-version', label: 'OS Version' },
+            { value: 'uuid', label: 'UUID/GUID' },
+            { value: 'sys-id', label: 'ServiceNow sys_id' },
+            { value: 'short-description', label: 'Short Description' },
+            { value: 'description', label: 'Description' },
+            { value: 'email', label: 'Email Address' },
+            { value: 'url', label: 'URL' },
+            { value: 'phone-number', label: 'Phone Number' }
+        ],
+        alphanumeric: [
+            { value: '', label: 'Select format (optional)...' },
+            { value: 'serial-number', label: 'Serial Number' },
+            { value: 'mac-address', label: 'MAC Address' },
+            { value: 'asset-tag', label: 'Asset Tag' },
+            { value: 'hostname', label: 'Hostname' },
+            { value: 'uuid', label: 'UUID/GUID' },
+            { value: 'sys-id', label: 'ServiceNow sys_id' }
+        ],
+        number: [
+            { value: '', label: 'Select format (optional)...' },
+            { value: 'integer', label: 'Integer' },
+            { value: 'positive-integer', label: 'Positive Integer' },
+            { value: 'port-number', label: 'Port Number (0-65535)' },
+            { value: 'percentage', label: 'Percentage (0-100)' },
+            { value: 'currency', label: 'Currency (2 decimals)' },
+            { value: 'decimal', label: 'Decimal (2 decimals)' },
+            { value: 'memory-mb', label: 'Memory (MB)' },
+            { value: 'memory-gb', label: 'Memory (GB)' },
+            { value: 'cpu-count', label: 'CPU Count' },
+            { value: 'disk-gb', label: 'Disk Size (GB)' }
+        ],
+        date: [
+            { value: '', label: 'Select format (optional)...' },
+            { value: 'date-only', label: 'Date Only (YYYY-MM-DD)' },
+            { value: 'datetime', label: 'DateTime (YYYY-MM-DD HH:mm:ss)' },
+            { value: 'time-only', label: 'Time Only (HH:mm:ss)' },
+            { value: 'servicenow-datetime', label: 'ServiceNow DateTime' }
+        ],
+        boolean: [
+            { value: '', label: 'Select format (optional)...' },
+            { value: 'standard', label: 'Boolean (true/false)' },
+            { value: 'yes-no', label: 'Boolean (Yes/No)' },
+            { value: 'one-zero', label: 'Boolean (1/0)' }
+        ]
+    },
+    
     async init() {
         console.log('[Phase2] init() called');
         
@@ -54,10 +115,11 @@ const Phase2 = {
             this.fileData = data;
             this.columns = data.columns;
             
-            // Update quality widget
+            // Update quality widget - Show "TBD" instead of percentage
             const widgetQualityScore = document.getElementById('widgetQualityScore');
             if (widgetQualityScore) {
-                widgetQualityScore.innerHTML = `${data.dataQualityScore}<span style="font-size: 0.6em;">%</span>`;
+                // Show "TBD" to indicate score will be calculated in Phase 3
+                widgetQualityScore.innerHTML = `<span style="font-size: 0.6em;">TBD</span>`;
             }
             
             const widgetTotalRecords = document.getElementById('widgetTotalRecords');
@@ -87,6 +149,11 @@ const Phase2 = {
         }
     },
     
+    // Get subtypes for a column type
+    getSubtypesForType(columnType) {
+        return this.subtypesByType[columnType] || [];
+    },
+    
     renderColumns() {
         console.log('[Phase2] renderColumns() starting with', this.columns.length, 'columns');
         const container = document.getElementById('columnsContainer');
@@ -95,7 +162,11 @@ const Phase2 = {
             return;
         }
         
-        container.innerHTML = this.columns.map((col, index) => `
+        container.innerHTML = this.columns.map((col, index) => {
+            const subtypes = this.getSubtypesForType(col.type);
+            const hasSubtypes = subtypes.length > 0;
+            
+            return `
             <div class="column-card" data-index="${index}">
                 <div class="column-card-header">
                     <h3 class="column-name">${col.name}</h3>
@@ -111,6 +182,21 @@ const Phase2 = {
                             ✕
                         </button>
                     </div>
+                </div>
+                
+                <!-- Data Format Selection (shown for all types) -->
+                <div class="subtype-selection" id="subtypeSelection_${index}" style="display: ${hasSubtypes ? 'block' : 'none'}; margin: 0.5rem 0; padding: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                    <label class="form-label" style="font-size: 0.85rem; margin-bottom: 0.25rem; color: #666;">
+                        📋 Data Format:
+                    </label>
+                    <select class="form-input subtype-select" data-index="${index}" style="font-size: 0.9rem;">
+                        ${subtypes.map(subtype => 
+                            `<option value="${subtype.value}" ${col.subtype === subtype.value ? 'selected' : ''}>${subtype.label}</option>`
+                        ).join('')}
+                    </select>
+                    <small style="display: block; color: #888; font-size: 0.75rem; margin-top: 0.25rem;">
+                        Select format for ServiceNow-specific validation
+                    </small>
                 </div>
                 
                 <div class="column-stats">
@@ -161,7 +247,7 @@ const Phase2 = {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         
         this.attachColumnEventListeners();
         this.updateColumnCount();
@@ -169,12 +255,38 @@ const Phase2 = {
     },
     
     attachColumnEventListeners() {
-        // Type change
+        // Type change - update subtype options
         document.querySelectorAll('.column-type-select').forEach(select => {
             select.addEventListener('change', (e) => {
                 const index = parseInt(e.target.dataset.index);
-                this.columns[index].type = e.target.value;
-                console.log(`Column ${this.columns[index].name} type changed to ${e.target.value}`);
+                const newType = e.target.value;
+                this.columns[index].type = newType;
+                this.columns[index].subtype = ''; // Reset subtype when type changes
+                
+                // Update subtype dropdown
+                const subtypeSelection = document.getElementById(`subtypeSelection_${index}`);
+                const subtypeSelect = subtypeSelection.querySelector('.subtype-select');
+                const subtypes = this.getSubtypesForType(newType);
+                
+                if (subtypes.length > 0) {
+                    subtypeSelection.style.display = 'block';
+                    subtypeSelect.innerHTML = subtypes.map(subtype => 
+                        `<option value="${subtype.value}">${subtype.label}</option>`
+                    ).join('');
+                } else {
+                    subtypeSelection.style.display = 'none';
+                }
+                
+                console.log(`Column ${this.columns[index].name} type changed to ${newType}`);
+            });
+        });
+        
+        // Subtype change
+        document.querySelectorAll('.subtype-select').forEach(select => {
+            select.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                this.columns[index].subtype = e.target.value;
+                console.log(`Column ${this.columns[index].name} subtype changed to ${e.target.value}`);
             });
         });
         
@@ -274,7 +386,7 @@ const Phase2 = {
                 columns: this.columns,
                 totalRecords: this.fileData.totalRecords,
                 fileName: this.fileData.fileName,
-                dataQualityScore: this.fileData.dataQualityScore
+                dataQualityScore: null // Will be calculated in Phase 3
             };
             
             console.log('[Phase2] Auto-saving configuration for Phase 3:', configuration);
@@ -322,6 +434,7 @@ const Phase2 = {
             columnSettings: this.columns.map(col => ({
                 name: col.name,
                 type: col.type,
+                subtype: col.subtype || '',
                 isUniqueQualifier: col.isUniqueQualifier,
                 isReferenceData: col.isReferenceData,
                 serviceNowTable: col.serviceNowTable

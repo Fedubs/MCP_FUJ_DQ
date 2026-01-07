@@ -74,8 +74,56 @@ router.get('/api/phase1/content', (req, res) => {
         </div>
 
         <div class="sn-content">
-            <!-- Left Column: ServiceNow + Upload -->
+            <!-- Left Column: Claude API + ServiceNow + Upload -->
             <div style="display: flex; flex-direction: column; gap: 1.5rem; flex: 1;">
+                
+                <!-- Claude API Key Panel -->
+                <div class="sn-panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">🤖 Claude API Key (Required)</h2>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label class="form-label" for="claudeApiKey">API Key</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input 
+                                    type="password" 
+                                    id="claudeApiKey" 
+                                    class="form-input" 
+                                    placeholder="sk-ant-api03-..."
+                                    style="flex: 1;"
+                                >
+                                <button id="toggleApiKeyBtn" class="sn-btn-secondary" onclick="Phase1.toggleApiKeyVisibility()" style="width: 80px;">
+                                    Show
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button id="testApiKeyBtn" class="sn-btn-secondary" onclick="Phase1.testClaudeApiKey()">
+                                    Test
+                                </button>
+                                <button id="saveApiKeyBtn" class="sn-btn-primary" onclick="Phase1.saveClaudeApiKey()" disabled>
+                                    Save
+                                </button>
+                                <button id="clearApiKeyBtn" class="sn-btn-secondary" onclick="Phase1.clearClaudeApiKey()" style="display: none;">
+                                    Clear
+                                </button>
+                            </div>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #666;">
+                                <span style="font-size: 1rem;">🔒</span>
+                                <span>Stored in browser cookie • Required for AI features</span>
+                            </div>
+                        </div>
+                        
+                        <div id="apiKeyStatus" style="margin-top: 1rem; display: none;">
+                            <!-- Status will be shown here -->
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ServiceNow Connection Panel (COMPACT) -->
                 <div class="sn-panel">
                     <div class="panel-header">
@@ -178,6 +226,10 @@ router.get('/api/phase1/content', (req, res) => {
                                 </div>
                             </div>
 
+                            <div id="apiKeyRequiredWarning" style="display: none; padding: 0.75rem; background: #fff3cd; border-left: 4px solid #ffc107; color: #856404; margin-bottom: 1rem; border-radius: 4px;">
+                                ⚠️ Please save a valid Claude API key before uploading
+                            </div>
+
                             <div class="form-actions">
                                 <button id="uploadBtn" class="sn-btn-primary" disabled onclick="Phase1.startUpload()">
                                     Upload & Analyze
@@ -253,6 +305,83 @@ router.get('/api/phase1/content', (req, res) => {
         <script src="/shared/js/app.js"></script>
         <script src="/shared/js/phase1.js"></script>
     `);
+});
+
+// POST /api/phase1/test-claude-api - Test Claude API key
+router.post('/api/phase1/test-claude-api', async (req, res) => {
+    try {
+        const { apiKey } = req.body;
+
+        if (!apiKey) {
+            return res.status(400).json({
+                success: false,
+                error: 'API key is required'
+            });
+        }
+
+        // Validate format
+        if (!apiKey.startsWith('sk-ant-')) {
+            return res.json({
+                success: false,
+                error: 'Invalid API key format. Key should start with sk-ant-'
+            });
+        }
+
+        console.log('Testing Claude API key...');
+
+        // Test with a minimal API call
+        const response = await axios.post('https://api.anthropic.com/v1/messages', {
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }]
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            timeout: 15000
+        });
+
+        if (response.status === 200) {
+            console.log('✓ Claude API key is valid');
+            res.json({
+                success: true,
+                message: 'API key is valid!'
+            });
+        } else {
+            throw new Error('Unexpected response from Claude API');
+        }
+
+    } catch (error) {
+        console.error('Claude API test failed:', error.message);
+        
+        let errorMessage = 'API key validation failed';
+        
+        if (error.response) {
+            if (error.response.status === 401) {
+                errorMessage = 'Invalid API key';
+            } else if (error.response.status === 403) {
+                errorMessage = 'API key does not have permission';
+            } else if (error.response.status === 429) {
+                errorMessage = 'Rate limited - but key appears valid';
+                // Rate limit means the key is valid, just overused
+                return res.json({
+                    success: true,
+                    message: 'API key is valid (rate limited)'
+                });
+            } else {
+                errorMessage = `Error: ${error.response.status} - ${error.response.data?.error?.message || error.response.statusText}`;
+            }
+        } else if (error.code === 'ETIMEDOUT') {
+            errorMessage = 'Connection timeout - please try again';
+        }
+
+        res.json({
+            success: false,
+            error: errorMessage
+        });
+    }
 });
 
 // POST /api/phase1/upload - Upload and analyze Excel file

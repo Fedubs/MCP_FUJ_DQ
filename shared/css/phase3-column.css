@@ -212,16 +212,21 @@ body {
 /* SCROLLABLE TABLE CONTAINER */
 .scrollable-table-container {
     max-height: 500px;
-    overflow-y: auto;
+    overflow: auto;
     border: 1px solid #dde3e7;
     border-radius: 4px;
     background: #fff;
 }
 
+/* ========================================
+   DATA PREVIEW TABLE - FIXED WIDTHS & TRUNCATION
+   ======================================== */
+
 .data-preview-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
+    table-layout: fixed; /* Enable fixed column widths */
 }
 
 .data-preview-table th,
@@ -229,6 +234,45 @@ body {
     padding: 0.75rem 1rem;
     text-align: left;
     border-bottom: 1px solid #dde3e7;
+    /* Text truncation */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Column width definitions */
+.data-preview-table th:nth-child(1),
+.data-preview-table td:nth-child(1) {
+    width: 70px; /* Row # */
+    min-width: 70px;
+}
+
+.data-preview-table th:nth-child(2),
+.data-preview-table td:nth-child(2) {
+    width: 180px; /* Current Value */
+    max-width: 180px;
+}
+
+.data-preview-table th:nth-child(3),
+.data-preview-table td:nth-child(3) {
+    width: 180px; /* Suggested Fix */
+    max-width: 180px;
+}
+
+/* Reason column (4th when present) */
+.data-preview-table th:nth-child(4),
+.data-preview-table td:nth-child(4) {
+    width: 200px; /* Reason */
+    max-width: 200px;
+}
+
+/* Action column (last column) */
+.data-preview-table th:last-child,
+.data-preview-table td:last-child {
+    width: 180px; /* Action buttons */
+    min-width: 180px;
+    overflow: visible; /* Allow buttons to show */
+    white-space: normal;
 }
 
 .data-preview-table th {
@@ -249,6 +293,11 @@ body {
 
 .data-preview-table tr:hover {
     background: rgba(220, 53, 69, 0.05);
+}
+
+/* Tooltip on hover to show full value */
+.data-preview-table td[title] {
+    cursor: help;
 }
 
 /* Action Buttons in Footer */
@@ -281,6 +330,11 @@ body {
     font-size: 0.85rem;
 }
 
+.btn-xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
 .btn-primary {
     background: var(--sn-primary);
     color: #fff;
@@ -309,6 +363,33 @@ body {
 .btn-success:hover:not(:disabled) {
     background: #218838;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #c82333;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background: #e0a800;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: #fff;
+}
+
+.btn-info:hover:not(:disabled) {
+    background: #138496;
 }
 
 /* ========================================
@@ -578,4 +659,16 @@ body {
     margin-top: 1rem;
     color: var(--sn-text-secondary);
     font-size: 1rem;
+}
+
+/* ========================================
+   TRUNCATED TEXT WITH TOOLTIP
+   ======================================== */
+
+.truncate-text {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
 }

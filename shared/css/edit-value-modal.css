@@ -1,0 +1,318 @@
+/* ========================================
+   EDIT VALUE MODAL - Styles
+   For editing MANUAL_CHECK_REQUIRED values
+   ======================================== */
+
+.edit-value-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.edit-value-modal {
+    background: #fff;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 550px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.edit-value-modal-header {
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(135deg, #81b5a1 0%, #5a9a7f 100%);
+    color: #fff;
+}
+
+.edit-value-modal-header h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.edit-value-modal-header .modal-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.edit-value-modal-header .type-badges {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.edit-value-modal-header .type-badge {
+    padding: 0.25rem 0.5rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.edit-value-modal-body {
+    padding: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Error Section */
+.validation-error-section {
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-left: 4px solid #dc3545;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.validation-error-section h4 {
+    color: #dc3545;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.validation-error-section p {
+    margin: 0;
+    color: #742a2a;
+    font-size: 0.9rem;
+}
+
+/* Format Rules Section */
+.format-rules-section {
+    background: #f0f9ff;
+    border: 1px solid #bee3f8;
+    border-left: 4px solid #17a2b8;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.format-rules-section h4 {
+    color: #17a2b8;
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.format-rules-section ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: #2c5282;
+    font-size: 0.85rem;
+}
+
+.format-rules-section li {
+    margin-bottom: 0.35rem;
+}
+
+/* Current Value Display */
+.current-value-section {
+    margin-bottom: 1.25rem;
+}
+
+.current-value-section label {
+    display: block;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.current-value-display {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+    color: #dc3545;
+    word-break: break-all;
+}
+
+/* New Value Input */
+.new-value-section {
+    margin-bottom: 1rem;
+}
+
+.new-value-section label {
+    display: block;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.new-value-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+.new-value-input:focus {
+    outline: none;
+    border-color: #81b5a1;
+    box-shadow: 0 0 0 3px rgba(129, 181, 161, 0.2);
+}
+
+.new-value-input.is-valid {
+    border-color: #28a745;
+}
+
+.new-value-input.is-invalid {
+    border-color: #dc3545;
+}
+
+/* Live Validation Feedback */
+.validation-feedback {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.validation-feedback.valid {
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    color: #22543d;
+}
+
+.validation-feedback.invalid {
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    color: #742a2a;
+}
+
+.validation-feedback.empty {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    color: #718096;
+}
+
+.validation-feedback .feedback-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* Preview Section */
+.preview-section {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-top: 1.25rem;
+}
+
+.preview-section h4 {
+    color: #92400e;
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+}
+
+.preview-change {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+}
+
+.preview-old {
+    color: #dc3545;
+    text-decoration: line-through;
+    word-break: break-all;
+    max-width: 40%;
+}
+
+.preview-arrow {
+    color: #92400e;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.preview-new {
+    color: #28a745;
+    font-weight: 600;
+    word-break: break-all;
+    max-width: 40%;
+}
+
+/* Modal Footer */
+.edit-value-modal-footer {
+    padding: 1rem 1.5rem;
+    background: #f7fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.edit-value-modal-footer button {
+    padding: 0.6rem 1.25rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancel-edit-modal {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #4a5568;
+}
+
+.btn-cancel-edit-modal:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+}
+
+.btn-save-edit-modal {
+    background: #28a745;
+    border: none;
+    color: #fff;
+}
+
+.btn-save-edit-modal:hover:not(:disabled) {
+    background: #218838;
+}
+
+.btn-save-edit-modal:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}

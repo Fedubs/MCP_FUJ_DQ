@@ -1,5 +1,5 @@
 // Phase 4: Export Clean Data - WITH CHANGE LOG COLUMN
-// ✅ UPDATED: Fixed color logic - Row number cell now green for KEEP rows
+// ✅ UPDATED: Added quality score display with light grey background
 const Phase4 = {
     allData: [],
     headers: [],
@@ -7,11 +7,74 @@ const Phase4 = {
     deletionCount: 0,
     changesMap: {},
     isEditing: false,
+    qualityScore: null,
 
     async init() {
         console.log('Phase 4 initialized');
+        await this.loadQualityScore();
         await this.loadChanges();
         this.setupEventDelegation();
+    },
+    
+    async loadQualityScore() {
+        try {
+            // First try to get existing score
+            let response = await fetch('/api/phase3/quality-score');
+            let result = await response.json();
+            
+            if (result.success && result.qualityScore !== null) {
+                this.qualityScore = result.qualityScore;
+            } else {
+                // Calculate if not available
+                response = await fetch('/api/phase3/recalculate-quality-score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                result = await response.json();
+                if (result.success) {
+                    this.qualityScore = result.qualityScore;
+                }
+            }
+            
+            // Update the display
+            this.updateQualityScoreDisplay();
+            
+        } catch (error) {
+            console.error('Error loading quality score:', error);
+        }
+    },
+    
+    updateQualityScoreDisplay() {
+        const scoreElement = document.getElementById('qualityScoreValue');
+        const percentElement = document.querySelector('.quality-score-percent');
+        const labelElement = document.querySelector('.quality-score-label');
+        
+        if (scoreElement && this.qualityScore !== null) {
+            scoreElement.textContent = this.qualityScore;
+            
+            // Always light grey background, color score based on value
+            const banner = document.getElementById('qualityScoreBanner');
+            if (banner) {
+                banner.style.background = '#e9ecef'; // Light grey
+            }
+            
+            // Color the score value based on quality
+            if (this.qualityScore >= 80) {
+                scoreElement.style.color = '#28a745'; // Green
+                if (percentElement) percentElement.style.color = '#28a745';
+            } else if (this.qualityScore >= 60) {
+                scoreElement.style.color = '#ffc107'; // Yellow/amber
+                if (percentElement) percentElement.style.color = '#ffc107';
+            } else {
+                scoreElement.style.color = '#dc3545'; // Red
+                if (percentElement) percentElement.style.color = '#dc3545';
+            }
+            
+            // Label always dark grey
+            if (labelElement) {
+                labelElement.style.color = '#495057';
+            }
+        }
     },
     
     setupEventDelegation() {

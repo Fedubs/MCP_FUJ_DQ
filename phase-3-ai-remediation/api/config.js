@@ -90,14 +90,115 @@ router.get('/api/phase3/content', (req, res) => {
                         <!-- Columns list will be loaded here -->
                     </div>
                 </div>
-
-                <div class="form-actions" style="margin-top: 2rem;">
-                    <button id="beginRemediationBtn" class="sn-btn-primary" style="font-size: 1.1rem; padding: 1rem 2rem;">
-                        Begin Remediation →
-                    </button>
-                </div>
             </div>
         </div>
+
+        <!-- Quality Score Breakdown - Horizontal with Begin Remediation (AT BOTTOM) -->
+        <div class="quality-breakdown-horizontal" id="qualityBreakdownSection">
+            <div class="breakdown-card" id="uniquenessCard">
+                <div class="breakdown-icon">📋</div>
+                <div class="breakdown-score" id="uniquenessScore">--%</div>
+                <div class="breakdown-label">Uniqueness</div>
+                <div class="breakdown-detail" id="uniquenessDetail">(-- weight · -- issues)</div>
+            </div>
+            <div class="breakdown-card" id="validityCard">
+                <div class="breakdown-icon">✓</div>
+                <div class="breakdown-score" id="validityScore">--%</div>
+                <div class="breakdown-label">Validity</div>
+                <div class="breakdown-detail" id="validityDetail">(-- weight · -- issues)</div>
+            </div>
+            <div class="breakdown-card" id="consistencyCard">
+                <div class="breakdown-icon">🔤</div>
+                <div class="breakdown-score" id="consistencyScore">--%</div>
+                <div class="breakdown-label">Consistency</div>
+                <div class="breakdown-detail" id="consistencyDetail">(-- weight · -- issues)</div>
+            </div>
+            <div class="breakdown-card" id="accuracyCard">
+                <div class="breakdown-icon">🎯</div>
+                <div class="breakdown-score" id="accuracyScore">--%</div>
+                <div class="breakdown-label">Accuracy</div>
+                <div class="breakdown-detail" id="accuracyDetail">(-- weight · -- issues)</div>
+            </div>
+            <div class="breakdown-card begin-card" id="beginRemediationCard">
+                <button id="beginRemediationBtn" class="begin-btn">
+                    <span class="begin-text">Begin Remediation</span>
+                    <span class="begin-arrow">→</span>
+                </button>
+            </div>
+        </div>
+
+        <style>
+            .quality-breakdown-horizontal {
+                display: flex;
+                gap: 1rem;
+                margin: 1.5rem 0;
+                align-items: stretch;
+            }
+            .breakdown-card {
+                flex: 1;
+                background: white;
+                border-radius: 8px;
+                padding: 1.25rem 1rem;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: 120px;
+            }
+            .breakdown-icon {
+                font-size: 1.5rem;
+                margin-bottom: 0.5rem;
+            }
+            .breakdown-score {
+                font-size: 1.75rem;
+                font-weight: bold;
+                color: #28a745;
+            }
+            .breakdown-score.warning {
+                color: #ffc107;
+            }
+            .breakdown-score.danger {
+                color: #dc3545;
+            }
+            .breakdown-label {
+                font-size: 0.9rem;
+                color: #555;
+                margin-top: 0.25rem;
+            }
+            .breakdown-detail {
+                font-size: 0.75rem;
+                color: #999;
+                margin-top: 0.25rem;
+            }
+            .breakdown-card.begin-card {
+                background: #74a290;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .begin-btn {
+                background: transparent;
+                border: none;
+                color: white;
+                font-size: 1.1rem;
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 1rem;
+                width: 100%;
+                transition: transform 0.2s;
+            }
+            .begin-btn:hover {
+                transform: scale(1.05);
+            }
+            .begin-arrow {
+                font-size: 1.5rem;
+            }
+        </style>
         
         <script src="/shared/js/app.js"></script>
         <script src="/shared/js/phase3.js"></script>

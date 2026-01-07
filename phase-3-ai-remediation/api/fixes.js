@@ -1,6 +1,8 @@
 // Phase 3: Apply Fixes API Routes - WITH ROW DELETION SUPPORT
 import express from 'express';
 import ExcelJS from 'exceljs';
+import { generateFix, autoDetectSubtype } from './data-format-validation.js';
+import { smartCapitalize } from './capitalization-helpers.js';
 
 const router = express.Router();
 
@@ -10,14 +12,12 @@ function ensureChangesLogColumn(worksheet) {
     const headerRow = worksheet.getRow(1);
     let changesColumnIndex = -1;
     
-    // Check if _CHANGES_LOG exists
     headerRow.eachCell((cell, colNumber) => {
         if (cell.value === '_CHANGES_LOG') {
             changesColumnIndex = colNumber;
         }
     });
     
-    // If doesn't exist, add as last column
     if (changesColumnIndex === -1) {
         const lastCol = headerRow.actualCellCount + 1;
         headerRow.getCell(lastCol).value = '_CHANGES_LOG';
@@ -34,44 +34,46 @@ function updateChangesLog(worksheet, rowNumber, columnName, action) {
     const row = worksheet.getRow(rowNumber);
     const changesCell = row.getCell(changesColumnIndex);
     
-    // Parse existing changes: "Email:changed,Name:kept"
     const existingChanges = changesCell.value ? String(changesCell.value) : '';
     const changesMap = {};
     
     if (existingChanges) {
         existingChanges.split(',').forEach(entry => {
-            const [col, act] = entry.split(':');
-            if (col && act) {
-                changesMap[col.trim()] = act.trim();
+            const [col, actions] = entry.split(':');
+            if (col && actions) {
+                changesMap[col.trim()] = actions.trim();
             }
         });
     }
     
-    // Update or add new change
-    changesMap[columnName] = action;
+    if (changesMap[columnName]) {
+        const existingActions = changesMap[columnName].split('|');
+        if (!existingActions.includes(action)) {
+            changesMap[columnName] = changesMap[columnName] + '|' + action;
+        }
+    } else {
+        changesMap[columnName] = action;
+    }
     
-    // Convert back to string
     const newChangesStr = Object.entries(changesMap)
-        .map(([col, act]) => `${col}:${act}`)
+        .map(([col, actions]) => `${col}:${actions}`)
         .join(',');
     
     changesCell.value = newChangesStr;
     console.log(`✓ Updated _CHANGES_LOG for row ${rowNumber}: ${newChangesStr}`);
 }
 
-// ✅ NEW: Ensure _ROW_DELETE column exists for marking rows to be deleted
+// Ensure _ROW_DELETE column exists for marking rows to be deleted
 function ensureRowDeleteColumn(worksheet) {
     const headerRow = worksheet.getRow(1);
     let deleteColumnIndex = -1;
     
-    // Check if _ROW_DELETE exists
     headerRow.eachCell((cell, colNumber) => {
         if (cell.value === '_ROW_DELETE') {
             deleteColumnIndex = colNumber;
         }
     });
     
-    // If doesn't exist, add as last column
     if (deleteColumnIndex === -1) {
         const lastCol = headerRow.actualCellCount + 1;
         headerRow.getCell(lastCol).value = '_ROW_DELETE';
@@ -82,57 +84,24 @@ function ensureRowDeleteColumn(worksheet) {
     return deleteColumnIndex;
 }
 
-// ✅ NEW: Mark entire row for deletion (will be highlighted red in Phase 4)
+// Mark entire row for deletion
 function markRowForDeletion(worksheet, rowNumber, reason) {
     const deleteColumnIndex = ensureRowDeleteColumn(worksheet);
     const row = worksheet.getRow(rowNumber);
     const deleteCell = row.getCell(deleteColumnIndex);
     
-    // Mark for deletion with reason: "DUPLICATE" or "INVALID"
     deleteCell.value = reason || 'DELETE';
-    
     console.log(`🗑️  Marked row ${rowNumber} for deletion: ${reason}`);
-}
-
-// Helper function for similarity checking
-function isSimilar(str1, str2, threshold = 2) {
-    if (str1 === str2) return true;
-    if (Math.abs(str1.length - str2.length) > threshold) return false;
-    
-    const matrix = [];
-    
-    for (let i = 0; i <= str2.length; i++) {
-        matrix[i] = [i];
-    }
-    
-    for (let j = 0; j <= str1.length; j++) {
-        matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= str2.length; i++) {
-        for (let j = 1; j <= str1.length; j++) {
-            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j - 1] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j] + 1
-                );
-            }
-        }
-    }
-    
-    return matrix[str2.length][str1.length] <= threshold;
 }
 
 // POST /api/phase3/apply-fixes - Apply fixes to column data
 router.post('/api/phase3/apply-fixes', async (req, res) => {
     try {
-        const { columnName, actionType, fixes } = req.body;
+        const { columnName, actionType, fixes, subtype, columnType } = req.body;
         
         console.log('Applying', actionType, 'fixes to column:', columnName);
         console.log('Total fixes to apply:', fixes.length);
+        if (subtype) console.log('Subtype:', subtype);
         
         // Get shared state
         const rawExcelData = req.app.locals.rawExcelData;
@@ -152,9 +121,10 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
         // Track which rows were actually fixed
         const fixedRows = new Set();
         
-        // ✅ UPDATED: Apply fixes based on action type
+        // ===== APPLY FIXES BASED ON ACTION TYPE =====
+        
         if (actionType === 'duplicates') {
-            // ✅ NEW IMPLEMENTATION: Mark rows for deletion instead of removing data
+            // Mark rows for deletion instead of removing data
             console.log('🗑️  Marking duplicate rows for deletion...');
             
             const workbook = new ExcelJS.Workbook();
@@ -162,20 +132,35 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
             const worksheet = workbook.worksheets[0];
             
             fixes.forEach(fix => {
-                // Mark this row for deletion
                 markRowForDeletion(worksheet, fix.rowNumber, 'DUPLICATE');
-                
-                // Also log in _CHANGES_LOG
-                updateChangesLog(worksheet, fix.rowNumber, columnName, 'deleted');
-                
+                updateChangesLog(worksheet, fix.rowNumber, columnName, 'duplicates');
                 fixedRows.add(fix.rowNumber);
                 fixedCount++;
             });
             
-            // Save marked rows
             await workbook.xlsx.writeFile(uploadedFilePath);
-            
             console.log(`🗑️  Marked ${fixedCount} duplicate rows for deletion`);
+            
+        } else if (actionType === 'data-format-validation') {
+            // ✅ UNIFIED: Data Format Validation fixes
+            console.log(`📋 Applying data format validation fixes...`);
+            
+            // Determine effective subtype
+            const effectiveSubtype = subtype || autoDetectSubtype(columnName, columnType);
+            
+            fixes.forEach(fix => {
+                const rowIndex = fix.rowNumber - 2;
+                if (rowIndex >= 0 && rowIndex < columnData.length) {
+                    // Only apply if suggested fix is not MANUAL_CHECK_REQUIRED
+                    if (fix.suggestedFix && fix.suggestedFix !== 'MANUAL_CHECK_REQUIRED') {
+                        columnData[rowIndex] = fix.suggestedFix;
+                        fixedRows.add(fix.rowNumber);
+                        fixedCount++;
+                    }
+                }
+            });
+            
+            console.log(`📋 Applied ${fixedCount} data format validation fixes`);
             
         } else if (actionType === 'empty') {
             fixes.forEach(fix => {
@@ -190,7 +175,7 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
         } else if (actionType === 'whitespace') {
             columnData = columnData.map((value, index) => {
                 if (typeof value === 'string' && value) {
-                    const trimmed = value.replace(/\s+/g, '');
+                    const trimmed = value.replace(/\s+/g, ' ').trim();
                     if (trimmed !== value) {
                         fixedRows.add(index + 2);
                         fixedCount++;
@@ -201,27 +186,24 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
             });
             
         } else if (actionType === 'capitalization') {
+            // ✅ SMART CAPITALIZATION - Using helper functions
+            console.log('🔤 Applying Smart Capitalization fixes...');
+            
             columnData = columnData.map((value, index) => {
                 if (typeof value === 'string' && value) {
-                    const original = value;
-                    const titleCase = value
-                        .toLowerCase()
-                        .split(/\s+/)
-                        .map(word => {
-                            const lowercase = ['and', 'or', 'the', 'a', 'an', 'of', 'in', 'on', 'at'];
-                            if (lowercase.includes(word)) return word;
-                            return word.charAt(0).toUpperCase() + word.slice(1);
-                        })
-                        .join(' ');
+                    const result = smartCapitalize(value);
                     
-                    if (titleCase !== original) {
+                    // Only apply if there's a change and it shouldn't be skipped
+                    if (!result.shouldSkip && result.suggestedFix !== value) {
                         fixedRows.add(index + 2);
                         fixedCount++;
+                        return result.suggestedFix;
                     }
-                    return titleCase;
                 }
                 return value;
             });
+            
+            console.log(`🔤 Applied ${fixedCount} capitalization fixes`);
             
         } else if (actionType === 'special-chars') {
             columnData = columnData.map((value, index) => {
@@ -235,6 +217,38 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
                     return cleaned;
                 }
                 return value;
+            });
+            
+        } else if (actionType === 'currency') {
+            columnData = columnData.map((value, index) => {
+                if (typeof value === 'string' && /[$€£¥₹]/.test(value)) {
+                    const cleaned = value.replace(/[$€£¥₹]/g, '').trim();
+                    fixedRows.add(index + 2);
+                    fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'commas') {
+            columnData = columnData.map((value, index) => {
+                if (typeof value === 'string' && value.includes(',')) {
+                    const cleaned = value.replace(/,/g, '');
+                    fixedRows.add(index + 2);
+                    fixedCount++;
+                    return cleaned;
+                }
+                return value;
+            });
+            
+        } else if (actionType === 'city-normalization') {
+            fixes.forEach(fix => {
+                const rowIndex = fix.rowNumber - 2;
+                if (rowIndex >= 0 && rowIndex < columnData.length) {
+                    columnData[rowIndex] = fix.suggestedFix;
+                    fixedRows.add(fix.rowNumber);
+                    fixedCount++;
+                }
             });
             
         } else if (actionType === 'ai-validation') {
@@ -282,8 +296,14 @@ router.post('/api/phase3/apply-fixes', async (req, res) => {
                 });
                 
                 // Track ONLY rows that were actually fixed
+                // For data-format-validation, include the subtype name in the action
+                let actionName = actionType;
+                if (actionType === 'data-format-validation' && subtype) {
+                    actionName = `format-${subtype}`;
+                }
+                    
                 fixedRows.forEach(rowNumber => {
-                    updateChangesLog(worksheet, rowNumber, columnName, 'changed');
+                    updateChangesLog(worksheet, rowNumber, columnName, actionName);
                 });
                 
                 await workbook.xlsx.writeFile(uploadedFilePath);
@@ -383,9 +403,9 @@ router.post('/api/phase3/update-cell', async (req, res) => {
         const cell = worksheet.getRow(rowNumber).getCell(columnIndex);
         cell.value = newValue || '';
         
-        // Track change in _CHANGES_LOG metadata
-        const action = (newValue === '') ? 'rejected' : 
-                      (newValue !== originalValue) ? 'changed' : 'kept';
+        // Track change in _CHANGES_LOG metadata with specific action
+        const action = (newValue === '') ? 'cleared' : 
+                      (newValue !== originalValue) ? 'manual-edit' : 'kept';
         updateChangesLog(worksheet, rowNumber, columnName, action);
         
         // Save
@@ -400,6 +420,45 @@ router.post('/api/phase3/update-cell', async (req, res) => {
         
     } catch (error) {
         console.error('Error updating cell:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
+// POST /api/phase3/mark-row-delete - Mark a row for deletion
+router.post('/api/phase3/mark-row-delete', async (req, res) => {
+    try {
+        const { rowNumber, columnName, reason } = req.body;
+        
+        console.log(`🗑️ Marking row ${rowNumber} for deletion. Reason: ${reason}`);
+        
+        const uploadedFilePath = req.app.locals.uploadedFilePath;
+        
+        // Update Excel file
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(uploadedFilePath);
+        const worksheet = workbook.worksheets[0];
+        
+        // Mark the row for deletion
+        markRowForDeletion(worksheet, rowNumber, reason || 'MANUAL_DELETE');
+        
+        // Also log in changes
+        updateChangesLog(worksheet, rowNumber, columnName, 'row-deleted');
+        
+        // Save
+        await workbook.xlsx.writeFile(uploadedFilePath);
+        
+        console.log(`✓ Row ${rowNumber} marked for deletion`);
+        
+        res.json({ 
+            success: true,
+            message: `Row ${rowNumber} marked for deletion`
+        });
+        
+    } catch (error) {
+        console.error('Error marking row for deletion:', error);
         res.status(500).json({ 
             success: false,
             error: error.message 

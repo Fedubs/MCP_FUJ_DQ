@@ -3,10 +3,12 @@
 const Phase1 = {
     selectedFile: null,
     serviceNowConnected: false,
+    claudeApiKeySaved: false,
     
     init() {
         console.log('Phase 1 initialized');
         this.setupEventListeners();
+        this.loadClaudeApiKeyFromCookie();
     },
     
     setupEventListeners() {
@@ -39,6 +41,237 @@ const Phase1 = {
         });
     },
     
+    // ========== CLAUDE API KEY METHODS ==========
+    
+    getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    },
+    
+    setCookie(name, value, days = 30) {
+        const expires = new Date(Date.now() + days * 864e5).toUTCString();
+        document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Strict`;
+    },
+    
+    deleteCookie(name) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    },
+    
+    loadClaudeApiKeyFromCookie() {
+        const savedKey = this.getCookie('claude_api_key');
+        const apiKeyInput = document.getElementById('claudeApiKey');
+        const statusDiv = document.getElementById('apiKeyStatus');
+        const saveBtn = document.getElementById('saveApiKeyBtn');
+        const testBtn = document.getElementById('testApiKeyBtn');
+        const clearBtn = document.getElementById('clearApiKeyBtn');
+        const toggleBtn = document.getElementById('toggleApiKeyBtn');
+        
+        if (savedKey) {
+            // Key exists in cookie - show masked state
+            apiKeyInput.value = '••••••••••••••••••••••••••••••••';
+            apiKeyInput.disabled = true;
+            apiKeyInput.type = 'password';
+            
+            this.claudeApiKeySaved = true;
+            
+            // Update buttons
+            saveBtn.style.display = 'none';
+            testBtn.style.display = 'none';
+            toggleBtn.style.display = 'none';
+            clearBtn.style.display = 'inline-block';
+            
+            // Show saved status
+            statusDiv.innerHTML = `
+                <div style="padding: 0.75rem; background: #d4edda; border-left: 4px solid #28a745; color: #155724;">
+                    ✓ API key saved and ready
+                </div>
+            `;
+            statusDiv.style.display = 'block';
+            
+            this.updateUploadButtonState();
+        }
+    },
+    
+    toggleApiKeyVisibility() {
+        const apiKeyInput = document.getElementById('claudeApiKey');
+        const toggleBtn = document.getElementById('toggleApiKeyBtn');
+        
+        if (apiKeyInput.type === 'password') {
+            apiKeyInput.type = 'text';
+            toggleBtn.textContent = 'Hide';
+        } else {
+            apiKeyInput.type = 'password';
+            toggleBtn.textContent = 'Show';
+        }
+    },
+    
+    async testClaudeApiKey() {
+        const apiKey = document.getElementById('claudeApiKey').value.trim();
+        const statusDiv = document.getElementById('apiKeyStatus');
+        const testBtn = document.getElementById('testApiKeyBtn');
+        const saveBtn = document.getElementById('saveApiKeyBtn');
+        
+        if (!apiKey) {
+            statusDiv.innerHTML = `
+                <div style="padding: 0.75rem; background: #fff3cd; border-left: 4px solid #ffc107; color: #856404;">
+                    ⚠️ Please enter an API key
+                </div>
+            `;
+            statusDiv.style.display = 'block';
+            return;
+        }
+        
+        // Validate format first
+        if (!apiKey.startsWith('sk-ant-')) {
+            statusDiv.innerHTML = `
+                <div style="padding: 0.75rem; background: #f8d7da; border-left: 4px solid #dc3545; color: #721c24;">
+                    ✗ Invalid format. API key should start with sk-ant-
+                </div>
+            `;
+            statusDiv.style.display = 'block';
+            saveBtn.disabled = true;
+            return;
+        }
+        
+        // Show loading state
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing...';
+        statusDiv.innerHTML = `
+            <div style="padding: 0.75rem; background: #e7f3ff; border-left: 4px solid #2196F3; color: #014361;">
+                🔄 Testing API key with Claude...
+            </div>
+        `;
+        statusDiv.style.display = 'block';
+        
+        try {
+            const response = await fetch('/api/phase1/test-claude-api', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                statusDiv.innerHTML = `
+                    <div style="padding: 0.75rem; background: #d4edda; border-left: 4px solid #28a745; color: #155724;">
+                        ✓ ${result.message} - Click Save to continue
+                    </div>
+                `;
+                saveBtn.disabled = false;
+            } else {
+                statusDiv.innerHTML = `
+                    <div style="padding: 0.75rem; background: #f8d7da; border-left: 4px solid #dc3545; color: #721c24;">
+                        ✗ ${result.error}
+                    </div>
+                `;
+                saveBtn.disabled = true;
+            }
+            
+        } catch (error) {
+            console.error('API key test error:', error);
+            statusDiv.innerHTML = `
+                <div style="padding: 0.75rem; background: #f8d7da; border-left: 4px solid #dc3545; color: #721c24;">
+                    ✗ Test failed: ${error.message}
+                </div>
+            `;
+            saveBtn.disabled = true;
+        } finally {
+            testBtn.disabled = false;
+            testBtn.textContent = 'Test';
+        }
+    },
+    
+    saveClaudeApiKey() {
+        const apiKey = document.getElementById('claudeApiKey').value.trim();
+        const apiKeyInput = document.getElementById('claudeApiKey');
+        const statusDiv = document.getElementById('apiKeyStatus');
+        const saveBtn = document.getElementById('saveApiKeyBtn');
+        const testBtn = document.getElementById('testApiKeyBtn');
+        const clearBtn = document.getElementById('clearApiKeyBtn');
+        const toggleBtn = document.getElementById('toggleApiKeyBtn');
+        
+        if (!apiKey || !apiKey.startsWith('sk-ant-')) {
+            alert('Please test a valid API key first');
+            return;
+        }
+        
+        // Save to cookie
+        this.setCookie('claude_api_key', apiKey, 30);
+        this.claudeApiKeySaved = true;
+        
+        // Mask the input
+        apiKeyInput.value = '••••••••••••••••••••••••••••••••';
+        apiKeyInput.disabled = true;
+        apiKeyInput.type = 'password';
+        
+        // Update buttons
+        saveBtn.style.display = 'none';
+        testBtn.style.display = 'none';
+        toggleBtn.style.display = 'none';
+        clearBtn.style.display = 'inline-block';
+        
+        // Update status
+        statusDiv.innerHTML = `
+            <div style="padding: 0.75rem; background: #d4edda; border-left: 4px solid #28a745; color: #155724;">
+                ✓ API key saved successfully
+            </div>
+        `;
+        
+        this.updateUploadButtonState();
+    },
+    
+    clearClaudeApiKey() {
+        const apiKeyInput = document.getElementById('claudeApiKey');
+        const statusDiv = document.getElementById('apiKeyStatus');
+        const saveBtn = document.getElementById('saveApiKeyBtn');
+        const testBtn = document.getElementById('testApiKeyBtn');
+        const clearBtn = document.getElementById('clearApiKeyBtn');
+        const toggleBtn = document.getElementById('toggleApiKeyBtn');
+        
+        // Delete cookie
+        this.deleteCookie('claude_api_key');
+        this.claudeApiKeySaved = false;
+        
+        // Reset input
+        apiKeyInput.value = '';
+        apiKeyInput.disabled = false;
+        apiKeyInput.type = 'password';
+        
+        // Update buttons
+        saveBtn.style.display = 'inline-block';
+        saveBtn.disabled = true;
+        testBtn.style.display = 'inline-block';
+        toggleBtn.style.display = 'inline-block';
+        toggleBtn.textContent = 'Show';
+        clearBtn.style.display = 'none';
+        
+        // Hide status
+        statusDiv.style.display = 'none';
+        
+        this.updateUploadButtonState();
+    },
+    
+    updateUploadButtonState() {
+        const uploadBtn = document.getElementById('uploadBtn');
+        const warningDiv = document.getElementById('apiKeyRequiredWarning');
+        
+        if (this.selectedFile && this.claudeApiKeySaved) {
+            uploadBtn.disabled = false;
+            if (warningDiv) warningDiv.style.display = 'none';
+        } else if (this.selectedFile && !this.claudeApiKeySaved) {
+            uploadBtn.disabled = true;
+            if (warningDiv) warningDiv.style.display = 'block';
+        } else {
+            uploadBtn.disabled = true;
+            if (warningDiv) warningDiv.style.display = 'none';
+        }
+    },
+    
+    // ========== FILE HANDLING METHODS ==========
+    
     handleFileSelect(file) {
         console.log('File selected:', file.name);
         
@@ -67,7 +300,7 @@ const Phase1 = {
         document.getElementById('fileInfo').style.display = 'block';
         document.getElementById('fileName').textContent = file.name;
         document.getElementById('fileSize').textContent = App.formatFileSize(file.size);
-        document.getElementById('uploadBtn').disabled = false;
+        this.updateUploadButtonState();
     },
     
     removeFile() {
@@ -80,9 +313,11 @@ const Phase1 = {
         document.getElementById('dropZone').style.display = 'block';
         document.getElementById('fileInfo').style.display = 'none';
         document.getElementById('progressContainer').style.display = 'none';
-        document.getElementById('uploadBtn').disabled = true;
         this.selectedFile = null;
+        this.updateUploadButtonState();
     },
+    
+    // ========== SERVICENOW METHODS ==========
     
     async testServiceNowConnection() {
         const instance = document.getElementById('snowInstance').value.trim();
@@ -179,11 +414,18 @@ const Phase1 = {
         this.serviceNowConnected = false;
     },
     
+    // ========== UPLOAD METHODS ==========
+    
     async startUpload() {
         console.log('Starting upload...');
         
         if (!this.selectedFile) {
             this.showError('Please select a file first');
+            return;
+        }
+        
+        if (!this.claudeApiKeySaved) {
+            this.showError('Please save a valid Claude API key first');
             return;
         }
         

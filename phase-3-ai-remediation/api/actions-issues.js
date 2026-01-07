@@ -1,5 +1,15 @@
 // Phase 3: Issue Detection - Find problematic rows for each action type
 import express from 'express';
+import { 
+    STRING_SUBTYPES,
+    NUMBER_SUBTYPES,
+    DATE_SUBTYPES,
+    BOOLEAN_SUBTYPES,
+    autoDetectSubtype,
+    validateValue,
+    generateFix
+} from './data-format-validation.js';
+import { smartCapitalize } from './capitalization-helpers.js';
 
 const router = express.Router();
 
@@ -38,16 +48,91 @@ function isSimilar(str1, str2, threshold = 2) {
 // POST /api/phase3/get-issues - Get problematic rows for specific action
 router.post('/api/phase3/get-issues', async (req, res) => {
     try {
-        const { columnName, actionType, columnData } = req.body;
+        const { columnName, actionType, columnData, subtype, columnType } = req.body;
         
-        console.log('Finding', actionType, 'issues in column:', columnName);
+        console.log('Finding', actionType, 'issues in column:', columnName, '| Type:', columnType, '| Subtype:', subtype || 'none');
         
         let issues = [];
         let tokensUsed = 0;
         
+        // ✅ UNIFIED: DATA FORMAT VALIDATION
+        if (actionType === 'data-format-validation') {
+            // Determine effective subtype
+            const effectiveSubtype = subtype || autoDetectSubtype(columnName, columnType);
+            
+            console.log(`Data Format Validation - Effective subtype: ${effectiveSubtype || 'basic'}`);
+            
+            // Get subtype rules for logging
+            let subtypeName = 'basic validation';
+            if (STRING_SUBTYPES[effectiveSubtype]) {
+                subtypeName = STRING_SUBTYPES[effectiveSubtype].name;
+            } else if (NUMBER_SUBTYPES[effectiveSubtype]) {
+                subtypeName = NUMBER_SUBTYPES[effectiveSubtype].name;
+            } else if (DATE_SUBTYPES[effectiveSubtype]) {
+                subtypeName = DATE_SUBTYPES[effectiveSubtype].name;
+            } else if (BOOLEAN_SUBTYPES[effectiveSubtype]) {
+                subtypeName = BOOLEAN_SUBTYPES[effectiveSubtype].name;
+            }
+            
+            console.log(`Validating against ${subtypeName} rules`);
+            
+            columnData.forEach((value, index) => {
+                // Skip empty values (handled by 'empty' action)
+                if (value === null || value === undefined || value === '') {
+                    return;
+                }
+                
+                const validation = validateValue(value, effectiveSubtype, columnType);
+                
+                // Skip if valid and no warning
+                if (validation.valid && !validation.warning && !validation.needsNormalization) {
+                    return;
+                }
+                
+                // Has an issue or warning
+                const suggestedFix = validation.needsNormalization 
+                    ? validation.suggestedFix 
+                    : generateFix(value, effectiveSubtype, columnType);
+                
+                issues.push({
+                    rowNumber: index + 2,
+                    currentValue: String(value),
+                    suggestedFix: suggestedFix,
+                    reason: validation.reason,
+                    severity: validation.severity || (validation.warning ? 'warning' : 'error')
+                });
+            });
+            
+            console.log(`Found ${issues.length} data format validation issues`);
+            
+            return res.json({
+                success: true,
+                issues: issues.slice(0, 100)
+            });
+        }
+        
         // AI VALIDATION
         if (actionType === 'ai-validation') {
-            const anthropic = req.app.locals.anthropic;
+            // Use lazy loader to get Anthropic client
+            const getAnthropic = req.app.locals.getAnthropic;
+            let anthropic = null;
+            
+            try {
+                anthropic = getAnthropic ? await getAnthropic() : null;
+            } catch (initError) {
+                console.error('Error initializing Anthropic client:', initError.message);
+            }
+            
+            if (!anthropic) {
+                console.log('AI validation skipped - Anthropic API not configured');
+                return res.json({
+                    success: true,
+                    issues: [],
+                    tokensUsed: 0,
+                    message: 'AI validation unavailable - ANTHROPIC_API_KEY not configured'
+                });
+            }
+            
             const sampleSize = Math.min(50, columnData.length);
             const dataSample = columnData.slice(0, sampleSize);
             
@@ -89,7 +174,7 @@ Limit to maximum 20 most important issues.`;
                     issues = parsed.issues || [];
                 }
             } catch (aiError) {
-                console.error('AI validation error:', aiError);
+                console.error('AI validation error:', aiError.message);
                 tokensUsed = 0;
             }
             
@@ -144,7 +229,6 @@ Limit to maximum 20 most important issues.`;
                 
                 rowsToCheck.forEach((value, index) => {
                     if (!value || value === '') {
-                        // Empty value
                         issues.push({
                             rowNumber: index + 2,
                             currentValue: '(empty)',
@@ -157,9 +241,7 @@ Limit to maximum 20 most important issues.`;
                     const excelValue = String(value).trim();
                     const excelValueLower = excelValue.toLowerCase();
                     
-                    // Check if found in ServiceNow
                     if (validValues.has(excelValueLower)) {
-                        // FOUND - Show as OK
                         issues.push({
                             rowNumber: index + 2,
                             currentValue: excelValue,
@@ -169,12 +251,11 @@ Limit to maximum 20 most important issues.`;
                         return;
                     }
                     
-                    // NOT FOUND - Find similar matches
                     let similarMatches = [];
                     for (const [snowValueLower, snowValue] of validValues.entries()) {
                         if (isSimilar(excelValueLower, snowValueLower, 3)) {
                             similarMatches.push(snowValue);
-                            if (similarMatches.length >= 3) break; // Limit to 3 suggestions
+                            if (similarMatches.length >= 3) break;
                         }
                     }
                     
@@ -221,7 +302,8 @@ Limit to maximum 20 most important issues.`;
                         issues.push({
                             rowNumber: rowIndex + 2,
                             currentValue: value,
-                            suggestedFix: 'Delete (keep first occurrence in row ' + (indices[0] + 2) + ')'
+                            suggestedFix: 'Delete (keep first occurrence in row ' + (indices[0] + 2) + ')',
+                            reason: `Duplicate value. First occurrence in row ${indices[0] + 2}.`
                         });
                     });
                 }
@@ -235,7 +317,8 @@ Limit to maximum 20 most important issues.`;
                     issues.push({
                         rowNumber: index + 2,
                         currentValue: '(empty)',
-                        suggestedFix: 'N/A or Unknown'
+                        suggestedFix: 'N/A or Unknown',
+                        reason: 'Empty value needs to be filled or marked as N/A.'
                     });
                 }
             });
@@ -250,32 +333,35 @@ Limit to maximum 20 most important issues.`;
                         issues.push({
                             rowNumber: index + 2,
                             currentValue: '"' + value + '"',
-                            suggestedFix: '"' + trimmed + '"'
+                            suggestedFix: '"' + trimmed + '"',
+                            reason: 'Contains leading/trailing spaces or multiple consecutive spaces.'
                         });
                     }
                 }
             });
         }
         
-        // CAPITALIZATION
+        // CAPITALIZATION - Using Smart Capitalization
         else if (actionType === 'capitalization') {
+            console.log('🔤 Using Smart Capitalization with code detection...');
+            
             columnData.forEach((value, index) => {
                 if (typeof value === 'string' && value) {
-                    const titleCase = value.toLowerCase().split(/\s+/).map(word => {
-                        const lowercase = ['and', 'or', 'the', 'a', 'an', 'of', 'in', 'on', 'at'];
-                        if (lowercase.includes(word)) return word;
-                        return word.charAt(0).toUpperCase() + word.slice(1);
-                    }).join(' ');
+                    const result = smartCapitalize(value);
                     
-                    if (titleCase !== value) {
+                    // Only add to issues if there's a change to suggest
+                    if (!result.shouldSkip && result.suggestedFix !== value) {
                         issues.push({
                             rowNumber: index + 2,
                             currentValue: value,
-                            suggestedFix: titleCase
+                            suggestedFix: result.suggestedFix,
+                            reason: result.reason || 'Standardized capitalization'
                         });
                     }
                 }
             });
+            
+            console.log(`🔤 Found ${issues.length} capitalization issues (skipped codes/acronyms/special cases)`);
         }
         
         // SPECIAL CHARACTERS
@@ -283,44 +369,13 @@ Limit to maximum 20 most important issues.`;
             columnData.forEach((value, index) => {
                 if (typeof value === 'string' && value && /[^a-zA-Z0-9\s\-_.]/.test(value)) {
                     const cleaned = value.replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim();
+                    const specialChars = value.match(/[^a-zA-Z0-9\s\-_.]/g);
                     issues.push({
                         rowNumber: index + 2,
                         currentValue: value,
-                        suggestedFix: cleaned
+                        suggestedFix: cleaned,
+                        reason: `Contains special characters: ${[...new Set(specialChars)].join(' ')}. These may cause issues in ServiceNow.`
                     });
-                }
-            });
-        }
-        
-        // NAMING CONVENTION
-        else if (actionType === 'naming-convention') {
-            const patterns = {};
-            columnData.forEach(value => {
-                if (typeof value === 'string' && value) {
-                    const normalized = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                    if (normalized) patterns[normalized] = (patterns[normalized] || 0) + 1;
-                }
-            });
-            
-            const sortedPatterns = Object.entries(patterns).sort((a, b) => b[1] - a[1]);
-            
-            columnData.forEach((value, index) => {
-                if (typeof value === 'string' && value) {
-                    const normalized = value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                    if (normalized !== value) {
-                        let bestMatch = normalized;
-                        for (const [pattern] of sortedPatterns) {
-                            if (isSimilar(normalized, pattern, 2)) {
-                                bestMatch = pattern;
-                                break;
-                            }
-                        }
-                        issues.push({
-                            rowNumber: index + 2,
-                            currentValue: value,
-                            suggestedFix: bestMatch
-                        });
-                    }
                 }
             });
         }
@@ -352,51 +407,10 @@ Limit to maximum 20 most important issues.`;
                         issues.push({
                             rowNumber: index + 2,
                             currentValue: value,
-                            suggestedFix: correctName
+                            suggestedFix: correctName,
+                            reason: `City name variation detected. Standard name: ${correctName}`
                         });
                     }
-                }
-            });
-        }
-        
-        // DATE FORMAT
-        else if (actionType === 'date-format') {
-            columnData.forEach((value, index) => {
-                if (!value) return;
-                try {
-                    const original = String(value);
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(original)) return;
-                    
-                    let date;
-                    if (value instanceof Date) date = value;
-                    else if (typeof value === 'string') date = new Date(value);
-                    else if (typeof value === 'number') date = new Date((value - 25569) * 86400 * 1000);
-                    
-                    if (date && !isNaN(date.getTime())) {
-                        const formatted = date.getFullYear() + '-' + 
-                                        String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                                        String(date.getDate()).padStart(2, '0');
-                        issues.push({
-                            rowNumber: index + 2,
-                            currentValue: original,
-                            suggestedFix: formatted
-                        });
-                    }
-                } catch (e) {}
-            });
-        }
-        
-        // INVALID DATES
-        else if (actionType === 'invalid-dates') {
-            columnData.forEach((value, index) => {
-                if (!value) return;
-                const date = new Date(value);
-                if (isNaN(date.getTime())) {
-                    issues.push({
-                        rowNumber: index + 2,
-                        currentValue: value,
-                        suggestedFix: 'Remove or set to today'
-                    });
                 }
             });
         }
@@ -408,7 +422,8 @@ Limit to maximum 20 most important issues.`;
                     issues.push({
                         rowNumber: index + 2,
                         currentValue: value,
-                        suggestedFix: value.replace(/[$€£¥₹]/g, '').trim()
+                        suggestedFix: value.replace(/[$€£¥₹]/g, '').trim(),
+                        reason: 'Currency symbols should be removed for numeric fields in ServiceNow.'
                     });
                 }
             });
@@ -421,9 +436,19 @@ Limit to maximum 20 most important issues.`;
                     issues.push({
                         rowNumber: index + 2,
                         currentValue: value,
-                        suggestedFix: value.replace(/,/g, '')
+                        suggestedFix: value.replace(/,/g, ''),
+                        reason: 'Commas in numbers can cause import issues. Removing for numeric consistency.'
                     });
                 }
+            });
+        }
+        
+        // Legacy support for old action type
+        else if (actionType === 'subtype-validation') {
+            // Redirect to data-format-validation
+            return res.json({
+                success: false,
+                error: 'subtype-validation is deprecated. Use data-format-validation instead.'
             });
         }
         

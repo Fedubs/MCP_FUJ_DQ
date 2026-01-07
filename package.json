@@ -6,7 +6,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "mkdir -p dist && cp src/index.js dist/index.js",
+    "build": "echo 'No build needed'",
     "start": "node server.js",
     "start:mcp": "node dist/index.js"
   },

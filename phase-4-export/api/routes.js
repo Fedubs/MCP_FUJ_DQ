@@ -1,5 +1,5 @@
 // Phase 4: Export API Routes - WITH ROW DELETION SUPPORT
-// ✅ UPDATED: Now applies EDIT changes before exporting
+// ✅ UPDATED: Fixed _CHANGES_LOG parsing to use comma separator
 import express from 'express';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -27,26 +27,36 @@ router.get('/api/phase4/content', (req, res) => {
                 <p class="review-subtitle">Review and edit any changes made during Phase 3 remediation</p>
             </div>
 
-            <div class="review-summary" id="reviewSummary">
-                <div class="summary-stat">
-                    <span class="stat-value" id="totalChanges">0</span>
-                    <span class="stat-label">Total Changes</span>
+            <!-- Quality Score Widget - Centered on Light Green -->
+            <div class="quality-score-banner" id="qualityScoreBanner">
+                <div class="quality-score-content">
+                    <span class="quality-score-value" id="qualityScoreValue">--</span>
+                    <span class="quality-score-percent">%</span>
+                    <span class="quality-score-label">Data Quality Score</span>
                 </div>
-                <div class="summary-stat">
-                    <span class="stat-value" id="changedCount">0</span>
-                    <span class="stat-label">Updated</span>
+            </div>
+
+            <!-- Summary Stats - Full Width Row -->
+            <div class="review-summary-fullwidth" id="reviewSummary">
+                <div class="summary-stat-fw">
+                    <span class="stat-value-fw" id="totalChanges">0</span>
+                    <span class="stat-label-fw">Total Changes</span>
                 </div>
-                <div class="summary-stat">
-                    <span class="stat-value" id="rejectedCount">0</span>
-                    <span class="stat-label">Rejected</span>
+                <div class="summary-stat-fw">
+                    <span class="stat-value-fw" id="changedCount">0</span>
+                    <span class="stat-label-fw">Updated</span>
                 </div>
-                <div class="summary-stat">
-                    <span class="stat-value" id="keptCount">0</span>
-                    <span class="stat-label">Kept Valid</span>
+                <div class="summary-stat-fw">
+                    <span class="stat-value-fw" id="rejectedCount">0</span>
+                    <span class="stat-label-fw">Rejected</span>
                 </div>
-                <div class="summary-stat" style="background: #ffebee;">
-                    <span class="stat-value" id="deletedCount" style="color: #f44336;">0</span>
-                    <span class="stat-label">🗑️ To Delete</span>
+                <div class="summary-stat-fw">
+                    <span class="stat-value-fw" id="keptCount">0</span>
+                    <span class="stat-label-fw">Kept Valid</span>
+                </div>
+                <div class="summary-stat-fw delete-stat">
+                    <span class="stat-value-fw" id="deletedCount">0</span>
+                    <span class="stat-label-fw">🗑️ To Delete</span>
                 </div>
             </div>
 
@@ -131,12 +141,91 @@ router.get('/api/phase4/content', (req, res) => {
             </div>
         </div>
         
+        <style>
+            /* Quality Score Banner - Light Green, Centered */
+            .quality-score-banner {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 1rem 1.5rem;
+                background: #d4edda;
+                border-radius: 8px;
+                margin-bottom: 1rem;
+            }
+            .quality-score-content {
+                display: flex;
+                align-items: baseline;
+                gap: 0.5rem;
+            }
+            .quality-score-value {
+                font-size: 2.5rem;
+                font-weight: bold;
+                color: #28a745;
+            }
+            .quality-score-percent {
+                font-size: 1.5rem;
+                color: #28a745;
+                font-weight: bold;
+            }
+            .quality-score-label {
+                font-size: 1rem;
+                color: #155724;
+                font-weight: 500;
+                margin-left: 0.5rem;
+            }
+            
+            /* Full Width Summary Stats */
+            .review-summary-fullwidth {
+                display: flex;
+                gap: 0;
+                margin-bottom: 1rem;
+                width: 100%;
+            }
+            .summary-stat-fw {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 1rem;
+                background: #f8f9fa;
+                border-right: 1px solid #e9ecef;
+            }
+            .summary-stat-fw:first-child {
+                border-radius: 8px 0 0 8px;
+            }
+            .summary-stat-fw:last-child {
+                border-radius: 0 8px 8px 0;
+                border-right: none;
+            }
+            .summary-stat-fw.delete-stat {
+                background: #ffebee;
+            }
+            .summary-stat-fw.delete-stat .stat-value-fw {
+                color: #f44336;
+            }
+            .stat-value-fw {
+                font-size: 1.75rem;
+                font-weight: bold;
+                color: #2d5a3d;
+            }
+            .stat-label-fw {
+                font-size: 0.8rem;
+                color: #666;
+                text-align: center;
+                margin-top: 0.25rem;
+            }
+        </style>
+        
         <script src="/shared/js/app.js"></script>
         <script src="/shared/js/phase4.js"></script>
     `);
 });
 
 // GET /api/phase4/get-changes - Read from Excel file directly
+// ✅ FIXED: Now correctly parses _CHANGES_LOG format:
+//    "Column1:action1|action2,Column2:action1" 
+//    Comma separates columns, pipe separates multiple actions on same column
 router.get('/api/phase4/get-changes', async (req, res) => {
     try {
         const uploadedFilePath = req.app.locals.uploadedFilePath;
@@ -204,7 +293,10 @@ router.get('/api/phase4/get-changes', async (req, res) => {
                 }
             }
             
-            // Parse changes log (format: "Column1:ACTION|Column2:ACTION")
+            // Parse changes log 
+            // ✅ FIXED FORMAT: "Column1:action1|action2,Column2:action1"
+            // - Comma separates different columns
+            // - Pipe separates multiple actions on same column
             let changesMap = {};
             if (changesLogIndex > 0) {
                 const changesStr = row.getCell(changesLogIndex).value?.toString() || '';
@@ -213,18 +305,25 @@ router.get('/api/phase4/get-changes', async (req, res) => {
                 if (changesStr) {
                     console.log(`📋 Row ${rowNumber} _CHANGES_LOG: "${changesStr}"`);
                     
-                    changesStr.split('|').forEach(entry => {
+                    // Split by COMMA to get each column's changes
+                    changesStr.split(',').forEach(entry => {
                         const colonIdx = entry.indexOf(':');
                         if (colonIdx > 0) {
                             const col = entry.substring(0, colonIdx).trim();
-                            const act = entry.substring(colonIdx + 1).trim();
-                            changesMap[col] = act;
-                            console.log(`   → ${col}: ${act}`);
+                            const actions = entry.substring(colonIdx + 1).trim();
+                            // Actions may contain pipe-separated multiple actions
+                            changesMap[col] = actions;
+                            console.log(`   → ${col}: ${actions}`);
                             
-                            if (act === 'DELETE_ROW') {
+                            // Check for deletion markers in actions
+                            const actionList = actions.split('|');
+                            if (actionList.includes('DELETE_ROW') || actionList.includes('duplicates') || actionList.includes('deleted')) {
                                 rowData.markedForDeletion = true;
                                 rowData.deletionReason = 'DUPLICATE';
-                                if (!deletionCount) deletionCount++;
+                                // Only increment if not already counted from _ROW_DELETE column
+                                if (rowDeleteIndex <= 0 || !row.getCell(rowDeleteIndex).value) {
+                                    deletionCount++;
+                                }
                             }
                         }
                     });
@@ -248,11 +347,12 @@ router.get('/api/phase4/get-changes', async (req, res) => {
                         rowNumber,
                         columnName: header.name,
                         action: action,
-                        markedForDeletion: action === 'DELETE_ROW'
+                        markedForDeletion: action.includes('DELETE_ROW') || action.includes('duplicates') || action.includes('deleted')
                     });
                 }
             });
             
+            // Add row-level deletion entry if marked
             if (rowData.markedForDeletion) {
                 trackedChanges.push({
                     rowNumber,
@@ -335,6 +435,7 @@ router.post('/api/phase4/update-change', async (req, res) => {
 });
 
 // POST /api/phase4/export - ✅ NOW APPLIES EDITS BEFORE EXPORTING
+// ✅ FIXED: Correctly parses comma-separated _CHANGES_LOG format
 router.post('/api/phase4/export', async (req, res) => {
     try {
         const uploadedFilePath = req.app.locals.uploadedFilePath;
@@ -367,7 +468,7 @@ router.post('/api/phase4/export', async (req, res) => {
         console.log('📋 Column index map:', columnIndexMap);
         console.log(`📋 _CHANGES_LOG at column ${changesLogIndex}`);
         
-        // ✅ STEP 1: Apply EDIT changes from _CHANGES_LOG
+        // ✅ STEP 1: Collect rows to delete and apply edits
         const rowsToDelete = [];
         let editsApplied = 0;
         
@@ -383,39 +484,44 @@ router.post('/api/phase4/export', async (req, res) => {
             }
             
             // Parse _CHANGES_LOG and apply edits
+            // ✅ FIXED: Split by COMMA for columns, then check for deletion markers
             if (changesLogIndex > 0) {
                 const changesStr = row.getCell(changesLogIndex).value?.toString() || '';
                 
                 if (changesStr) {
-                    changesStr.split('|').forEach(entry => {
+                    // Split by comma to get each column entry
+                    changesStr.split(',').forEach(entry => {
                         const colonIdx = entry.indexOf(':');
                         if (colonIdx > 0) {
                             const colName = entry.substring(0, colonIdx).trim();
-                            const action = entry.substring(colonIdx + 1).trim();
+                            const actions = entry.substring(colonIdx + 1).trim();
                             
-                            // Check for DELETE_ROW
-                            if (action === 'DELETE_ROW') {
+                            // Check for deletion markers (may be pipe-separated with other actions)
+                            const actionList = actions.split('|');
+                            if (actionList.includes('DELETE_ROW') || actionList.includes('duplicates') || actionList.includes('deleted')) {
                                 if (!rowsToDelete.includes(rowNumber)) {
                                     rowsToDelete.push(rowNumber);
                                 }
                             }
+                            
                             // ✅ Check for EDIT (format: OldValue→NewValue)
-                            else if (action.includes('→')) {
-                                const arrowIdx = action.indexOf('→');
-                                const newValue = action.substring(arrowIdx + 1).trim();
-                                
-                                // Find column index and apply new value
-                                const targetColIndex = columnIndexMap[colName];
-                                if (targetColIndex) {
-                                    const currentValue = row.getCell(targetColIndex).value?.toString() || '';
-                                    row.getCell(targetColIndex).value = newValue;
-                                    console.log(`✎ Row ${rowNumber}, ${colName}: "${currentValue}" → "${newValue}"`);
-                                    editsApplied++;
-                                } else {
-                                    console.log(`⚠️ Column "${colName}" not found for edit`);
+                            actionList.forEach(action => {
+                                if (action.includes('→')) {
+                                    const arrowIdx = action.indexOf('→');
+                                    const newValue = action.substring(arrowIdx + 1).trim();
+                                    
+                                    // Find column index and apply new value
+                                    const targetColIndex = columnIndexMap[colName];
+                                    if (targetColIndex) {
+                                        const currentValue = row.getCell(targetColIndex).value?.toString() || '';
+                                        row.getCell(targetColIndex).value = newValue;
+                                        console.log(`✎ Row ${rowNumber}, ${colName}: "${currentValue}" → "${newValue}"`);
+                                        editsApplied++;
+                                    } else {
+                                        console.log(`⚠️ Column "${colName}" not found for edit`);
+                                    }
                                 }
-                            }
-                            // KEEP - no action needed, value stays the same
+                            });
                         }
                     });
                 }

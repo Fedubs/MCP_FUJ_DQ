@@ -1,5 +1,13 @@
 // Phase 3: Action Generation - Rule-based actions
 import express from 'express';
+import { 
+    STRING_SUBTYPES, 
+    NUMBER_SUBTYPES, 
+    DATE_SUBTYPES, 
+    BOOLEAN_SUBTYPES,
+    autoDetectSubtype,
+    getSubtypesForColumnType 
+} from './data-format-validation.js';
 
 const router = express.Router();
 
@@ -9,31 +17,45 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
         const { columnName, columnType, stats } = req.body;
         
         console.log('RULE-BASED action generation for:', columnName);
+        console.log('Column type:', columnType, '| Subtype:', stats.subtype || '(none)');
+        console.log('Stats:', JSON.stringify(stats));
         
         const actions = [];
         
-        // RULE 1: CRITICAL - Unique Qualifier with Duplicates
-        if (stats.isUniqueQualifier && stats.duplicates > 0) {
-            actions.push({
-                type: 'duplicates',
-                title: '⚠️ Remove Duplicates (CRITICAL)',
-                description: 'This column is marked as a unique qualifier but has ' + stats.duplicates + ' duplicate values.',
-                issueCount: stats.duplicates,
-                severity: 'critical'
-            });
-        }
-        // RULE 2: Non-Unique Qualifier with Many Duplicates
-        else if (!stats.isUniqueQualifier && stats.duplicates > (stats.totalRecords * 0.1)) {
-            actions.push({
-                type: 'duplicates',
-                title: 'Review Duplicate Values',
-                description: 'Found ' + stats.duplicates + ' duplicate values.',
-                issueCount: stats.duplicates,
-                severity: 'warning'
-            });
+        // Determine subtype - user-selected or auto-detected
+        let effectiveSubtype = stats.subtype || autoDetectSubtype(columnName, columnType);
+        let autoDetected = !stats.subtype && effectiveSubtype;
+        
+        if (autoDetected) {
+            console.log(`   Auto-detected subtype: ${effectiveSubtype}`);
         }
         
-        // RULE 3: Empty Values
+        // RULE 1: DUPLICATES - Always show if there are any duplicates
+        if (stats.duplicates > 0) {
+            if (stats.isUniqueQualifier) {
+                // CRITICAL - Unique Qualifier with Duplicates
+                actions.push({
+                    type: 'duplicates',
+                    title: '⚠️ Remove Duplicates (CRITICAL)',
+                    description: 'This column is marked as a unique qualifier but has ' + stats.duplicates + ' duplicate values.',
+                    issueCount: stats.duplicates,
+                    severity: 'critical'
+                });
+            } else {
+                // Non-unique - still show but as warning/info
+                const percentage = Math.round((stats.duplicates / stats.totalRecords) * 100);
+                const severity = percentage > 10 ? 'warning' : 'info';
+                actions.push({
+                    type: 'duplicates',
+                    title: '🔄 Review Duplicate Values',
+                    description: `Found ${stats.duplicates} duplicate values (${percentage}% of records).`,
+                    issueCount: stats.duplicates,
+                    severity: severity
+                });
+            }
+        }
+        
+        // RULE 2: Empty Values
         if (stats.emptyRecords > 0) {
             const percentage = Math.round((stats.emptyRecords / stats.totalRecords) * 100);
             const severity = percentage > 20 ? 'critical' : (percentage > 5 ? 'warning' : 'info');
@@ -46,14 +68,78 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
             });
         }
         
-        // TYPE-SPECIFIC RULES
-        if (columnType === 'string') {
+        // ✅ UNIFIED: DATA FORMAT VALIDATION (for ALL column types)
+        // Simple title, detailed description
+        let formatValidationDesc = 'Check values match expected format, length, and pattern.';
+        
+        // Get specific description based on subtype or type
+        if (effectiveSubtype) {
+            let subtypeRules = null;
+            let subtypeName = effectiveSubtype;
+            
+            if (STRING_SUBTYPES[effectiveSubtype]) {
+                subtypeRules = STRING_SUBTYPES[effectiveSubtype];
+                subtypeName = subtypeRules.name;
+                formatValidationDesc = `Validate ${subtypeName} format (${subtypeRules.minLength}-${subtypeRules.maxLength} chars).`;
+            } else if (NUMBER_SUBTYPES[effectiveSubtype]) {
+                subtypeRules = NUMBER_SUBTYPES[effectiveSubtype];
+                subtypeName = subtypeRules.name;
+                if (subtypeRules.min !== null && subtypeRules.max !== null) {
+                    formatValidationDesc = `Validate ${subtypeName} (${subtypeRules.min} to ${subtypeRules.max}, ${subtypeRules.decimals} decimals).`;
+                } else {
+                    formatValidationDesc = `Validate ${subtypeName} format (${subtypeRules.decimals} decimal places).`;
+                }
+            } else if (DATE_SUBTYPES[effectiveSubtype]) {
+                subtypeRules = DATE_SUBTYPES[effectiveSubtype];
+                subtypeName = subtypeRules.name;
+                formatValidationDesc = `Validate ${subtypeName} format (${subtypeRules.format}).`;
+            } else if (BOOLEAN_SUBTYPES[effectiveSubtype]) {
+                subtypeRules = BOOLEAN_SUBTYPES[effectiveSubtype];
+                subtypeName = subtypeRules.name;
+                formatValidationDesc = `Normalize to ${subtypeRules.outputTrue}/${subtypeRules.outputFalse} format.`;
+            }
+            
+            // Add auto-detected note to description
+            if (autoDetected) {
+                formatValidationDesc += ` (Auto-detected: ${subtypeName})`;
+            }
+        } else {
+            // No subtype - use generic description based on column type
+            switch (columnType) {
+                case 'string':
+                case 'alphanumeric':
+                    formatValidationDesc = 'Check for consistent length, format, and naming patterns.';
+                    break;
+                case 'number':
+                    formatValidationDesc = 'Validate numeric format, range, and check for negative values.';
+                    break;
+                case 'date':
+                    formatValidationDesc = 'Validate date format and check for invalid dates.';
+                    break;
+                case 'boolean':
+                    formatValidationDesc = 'Normalize boolean values to consistent format.';
+                    break;
+            }
+        }
+        
+        actions.push({
+            type: 'data-format-validation',
+            subtype: effectiveSubtype || null,
+            autoDetected: autoDetected,
+            title: '📋 Data Format Validation',
+            description: formatValidationDesc,
+            issueCount: 0,
+            severity: 'warning'
+        });
+        
+        // TYPE-SPECIFIC ADDITIONAL RULES
+        if (columnType === 'string' || columnType === 'alphanumeric') {
             actions.push({ 
                 type: 'whitespace', 
                 title: 'Trim Whitespace', 
                 description: 'Remove leading/trailing spaces and collapse multiple spaces.', 
                 issueCount: 0, 
-                severity: 'warning' 
+                severity: 'info' 
             });
             
             actions.push({ 
@@ -72,14 +158,7 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
                 severity: 'info' 
             });
             
-            actions.push({
-                type: 'naming-convention',
-                title: 'Standardize Naming Convention',
-                description: 'Normalize variations (e.g., ALKpRD → ALKPRD, ALPPROD → ALKPROD).',
-                issueCount: 0,
-                severity: 'warning'
-            });
-            
+            // City normalization for location-type columns
             if (columnName.toLowerCase().includes('city') || 
                 columnName.toLowerCase().includes('location') ||
                 columnName.toLowerCase().includes('site')) {
@@ -98,7 +177,7 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
                 title: 'Remove Currency Symbols', 
                 description: 'Strip $, €, £ symbols from numbers.', 
                 issueCount: 0, 
-                severity: 'warning' 
+                severity: 'info' 
             });
             
             actions.push({ 
@@ -106,122 +185,7 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
                 title: 'Remove Commas', 
                 description: 'Convert 1,234.56 to 1234.56.', 
                 issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({ 
-                type: 'numeric-validation', 
-                title: 'Validate Numeric Format', 
-                description: 'Flag non-numeric values.', 
-                issueCount: 0, 
-                severity: 'critical' 
-            });
-            
-            actions.push({ 
-                type: 'negative-values', 
-                title: 'Check Negative Values', 
-                description: 'Convert negative numbers to positive if needed.', 
-                issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({ 
-                type: 'decimals', 
-                title: 'Standardize Decimal Places', 
-                description: 'Format all numbers to 2 decimal places.', 
-                issueCount: 0, 
                 severity: 'info' 
-            });
-        }
-        else if (columnType === 'date') {
-            actions.push({ 
-                type: 'date-format', 
-                title: 'Convert to ServiceNow Format (YYYY-MM-DD)', 
-                description: 'Standardize all dates to YYYY-MM-DD format required by ServiceNow.', 
-                issueCount: 0, 
-                severity: 'critical' 
-            });
-            
-            actions.push({ 
-                type: 'invalid-dates', 
-                title: 'Fix Invalid Dates', 
-                description: 'Flag impossible or unparseable dates.', 
-                issueCount: 0, 
-                severity: 'critical' 
-            });
-            
-            actions.push({ 
-                type: 'future-dates', 
-                title: 'Flag Future Dates', 
-                description: 'Check for dates in the future.', 
-                issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({ 
-                type: 'old-dates', 
-                title: 'Flag Historical Dates', 
-                description: 'Check dates before 1990.', 
-                issueCount: 0, 
-                severity: 'info' 
-            });
-        }
-        else if (columnType === 'alphanumeric') {
-            actions.push({ 
-                type: 'whitespace', 
-                title: 'Trim Whitespace', 
-                description: 'Remove leading/trailing spaces and collapse multiple spaces.', 
-                issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({ 
-                type: 'case-format', 
-                title: 'Standardize Case Format', 
-                description: 'Convert to consistent uppercase format.', 
-                issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({ 
-                type: 'separators', 
-                title: 'Standardize Separators', 
-                description: 'Use consistent separators (hyphens).', 
-                issueCount: 0, 
-                severity: 'info' 
-            });
-            
-            actions.push({ 
-                type: 'length-validation', 
-                title: 'Validate Length', 
-                description: 'Check for unexpected lengths.', 
-                issueCount: 0, 
-                severity: 'warning' 
-            });
-            
-            actions.push({
-                type: 'naming-convention',
-                title: 'Standardize Naming Convention',
-                description: 'Normalize variations and ensure consistency.',
-                issueCount: 0,
-                severity: 'warning'
-            });
-        }
-        else if (columnType === 'boolean') {
-            actions.push({ 
-                type: 'boolean-standardize', 
-                title: 'Standardize Boolean Values', 
-                description: 'Convert yes/no/1/0 to true/false.', 
-                issueCount: 0, 
-                severity: 'critical' 
-            });
-            
-            actions.push({ 
-                type: 'boolean-invalid', 
-                title: 'Fix Invalid Boolean Values', 
-                description: 'Flag values that are not boolean.', 
-                issueCount: 0, 
-                severity: 'critical' 
             });
         }
         
@@ -245,7 +209,7 @@ router.post('/api/phase3/generate-actions-rules', (req, res) => {
             severity: 'info'
         });
         
-        console.log('Generated', actions.length, 'rule-based actions (including AI validation)');
+        console.log('Generated', actions.length, 'rule-based actions');
         
         res.json({ success: true, actions: actions });
         
